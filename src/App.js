@@ -16,6 +16,7 @@ import LocationsPage from './pages/LocationsPage';
 import StockPage from './pages/StockPage';
 import SettingsPage from './pages/SettingsPage';
 import CategoriesPage from './pages/CategoriesPage';
+import NotificationsPage from './pages/NotificationsPage';
 
 function App() {
   const theme = useMemo(
@@ -53,6 +54,7 @@ function App() {
           <Route path="/stock" element={<StockPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="*" element={<Navigate replace to="/dashboard" />} />
         </Routes>
       </BrowserRouter>

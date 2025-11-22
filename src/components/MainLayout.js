@@ -17,6 +17,8 @@ function MainLayout({ children }) {
     const active = navSequence.find((entry) => entry.type === 'item' && entry.path === location.pathname);
     if (active) {
       setActiveMain(active.label);
+    } else if (location.pathname === '/notifications') {
+      setActiveMain('Notifications');
     } else if (isOperationsActive) {
       setActiveMain('Operations');
     } else if (isSettingsActive) {
@@ -136,7 +138,16 @@ function MainLayout({ children }) {
             })}
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Button variant="outlined" color="inherit">
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={() => {
+                navigate('/notifications');
+                if (location.pathname === '/notifications') {
+                  setActiveMain('Notifications');
+                }
+              }}
+            >
               Notification
             </Button>
             <Button variant="contained" color="secondary">
