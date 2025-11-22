@@ -1,4 +1,170 @@
-# Getting Started with Create React App
+# Stock Master
+
+A full-stack application with OTP authentication, featuring a React frontend and FastAPI backend.
+
+## Project Structure
+
+```
+stock-master/
+├── backend/          # FastAPI backend service
+│   └── app/          # Backend application code
+├── src/              # React frontend
+│   ├── components/   # React components
+│   └── services/     # API service layer
+└── public/           # Static assets
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js and npm
+- MySQL database
+- Gmail account (for OTP email service)
+
+### 1. Backend Setup
+
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate virtual environment
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+# Windows CMD:
+.\.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r app/requirements.txt
+
+# Create .env file (see SETUP_ENV.md for details)
+# Or use the PowerShell script:
+.\create_env.ps1
+
+# Test database connection
+python -m app.test
+
+# Test all services
+python -m app.test_services
+
+# Start the server
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The API will be available at `http://localhost:8000`
+API documentation: `http://localhost:8000/docs`
+
+### 2. Frontend Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Create .env file (or use the PowerShell script)
+.\create_env.ps1
+
+# Start development server
+npm start
+```
+
+The app will open at `http://localhost:3000`
+
+## Environment Variables
+
+See [SETUP_ENV.md](SETUP_ENV.md) for detailed environment variable setup instructions.
+
+### Backend (.env in `backend/` directory)
+- `EMAIL_ADDRESS` - Gmail address for sending OTPs
+- `EMAIL_PASSWORD` - Gmail App Password (not regular password)
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - Database configuration
+- `OTP_LENGTH` - Length of OTP code (default: 6)
+- `OTP_EXPIRY_MINUTES` - OTP expiration time (default: 5)
+
+### Frontend (.env in root directory)
+- `REACT_APP_API_URL` - Backend API URL (default: http://localhost:8000)
+
+## Testing
+
+### Backend Services Test
+
+Comprehensive test suite for all backend services:
+
+```bash
+cd backend
+python -m app.test_services
+```
+
+This will test:
+- Configuration loading
+- Database connection
+- Database tables
+- OTP generation
+- Email service (optional)
+- API endpoints (requires running server)
+
+### Database Connection Test
+
+Simple database connectivity test:
+
+```bash
+cd backend
+python -m app.test
+```
+
+## API Endpoints
+
+### POST /send-otp
+Send OTP to an email address.
+
+**Request:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "OTP sent"
+}
+```
+
+### POST /verify-otp
+Verify an OTP code.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "otp": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "OTP verified"
+}
+```
+
+## Features
+
+- ✅ OTP generation and email delivery
+- ✅ OTP verification with expiration
+- ✅ React frontend with API integration
+- ✅ Comprehensive test suite
+- ✅ Environment-based configuration
+- ✅ Database persistence
+
+## Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 

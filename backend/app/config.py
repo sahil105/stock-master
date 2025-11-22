@@ -2,7 +2,9 @@
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseSettings, EmailStr  # type: ignore[import]
+from pydantic import EmailStr  # type: ignore[import]
+from pydantic_settings import BaseSettings
+from urllib.parse import quote_plus
 
 
 class Settings(BaseSettings):
@@ -40,9 +42,9 @@ class Settings(BaseSettings):
                 "Database configuration is incomplete: "
                 + ", ".join(missing)
             )
-
+        password = quote_plus(self.DB_PASSWORD)
         return (
-            f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}"
+            f"mysql+pymysql://{self.DB_USER}:{password}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
 
