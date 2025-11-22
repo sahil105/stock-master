@@ -906,26 +906,85 @@ def delete_product(
     cursor.close()
     return None
 
+from collections import defaultdict
+
 @app.get("/api/v1/products_stock", tags=["Products"])
 def get_product_stock(
-    current_user: dict = Depends(get_current_user),
+    search: Optional[str] = Query(None),
     conn = Depends(get_db)
 ):
-    """Get product stock per warehouse (Updated to use stock_snapshot.quantity)"""
+    """
+    Get product stock grouped by product, listing details per warehouse.
+    Uses the 'on_hand' and 'reserved' columns from your schema.
+    """
     cursor = conn.cursor(dictionary=True)
-    # Updated to use stock_snapshot.quantity and handle missing reserved column
-    cursor.execute(
-        """SELECT p.*, 
-           COALESCE(ss.quantity, 0) as on_hand,
-           0 as reserved,
-           COALESCE(ss.quantity, 0) as free_to_use
-           FROM products p
-           LEFT JOIN stock_snapshot ss ON p.id = ss.product_id"""
-    )
-    stock = cursor.fetchall()
-    cursor.close()
     
-    return {"data": stock}
+    # 1. Build Query conditions
+    conditions = []
+    params = []
+    
+    if search:
+        conditions.append("(p.name LIKE %s OR p.sku LIKE %s)")
+        params.extend([f"%{search}%", f"%{search}%"])
+        
+    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+
+    # 2. Fetch Data (Join Products, Stock Snapshot, and Warehouses)
+    # We use COALESCE to handle cases where a product has no stock entry yet (returns 0)
+    query = f"""
+        SELECT 
+            p.id as product_id,
+            p.name as product_name,
+            p.sku,
+            w.id as warehouse_id,
+            w.name as warehouse_name,
+            COALESCE(ss.on_hand, 0) as on_hand,
+            COALESCE(ss.reserved, 0) as reserved
+        FROM products p
+        JOIN stock_snapshot ss ON p.id = ss.product_id
+        JOIN warehouses w ON ss.warehouse_id = w.id
+        {where_clause}
+        ORDER BY p.id, w.id
+    """
+    
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    cursor.close()
+
+    # 3. Python Grouping Logic
+    # We use a dictionary to group flat SQL rows into nested objects
+    grouped_stock = defaultdict(lambda: {
+        "product_id": None, 
+        "product_name": None, 
+        "sku": None,
+        "stock_by_warehouse": []
+    })
+
+    for row in rows:
+        pid = row["product_id"]
+        
+        # Initialize product info if seen for the first time
+        if grouped_stock[pid]["product_id"] is None:
+            grouped_stock[pid]["product_id"] = row["product_id"]
+            grouped_stock[pid]["product_name"] = row["product_name"]
+            grouped_stock[pid]["sku"] = row["sku"]
+        
+        # Calculate Free to Use
+        on_hand = float(row["on_hand"])
+        reserved = float(row["reserved"])
+        free_to_use = on_hand - reserved
+        
+        # Append warehouse detail
+        grouped_stock[pid]["stock_by_warehouse"].append({
+            "warehouse_id": row["warehouse_id"],
+            "warehouse_name": row["warehouse_name"],
+            "on_hand": on_hand,
+            "reserved": reserved,
+            "free_to_use": free_to_use
+        })
+
+    # 4. Convert dictionary values to a list for the JSON response
+    return {"data": list(grouped_stock.values())}
 
 # ============================================
 # RECEIPTS ENDPOINTS
