@@ -115,11 +115,48 @@ components:
     ProductStock:
       type: object
       properties:
+        product_id:
+          type: integer
+          example: 10
+        product_name:
+          type: string
+          example: "Steel Rod"
+        stock_by_warehouse:
+          type: array
+          items:
+            type: object
+            properties:
+              warehouse_id:
+                type: integer
+                example: 1
+              warehouse_name:
+                type: string
+                example: "Main Warehouse"
+              on_hand:
+                type: number
+                example: 80
+              reserved:
+                type: number
+                example: 30
+              free_to_use:
+                type: number
+                description: on_hand - reserved
+                example: 50
+
+    stockSummary:
+      type: object
+      properties:
         total_product_in_stock: { type: integer, example: 101 }
         low_stock_item_count: { type: integer, example: 5 }
         pending_receipts_count: { type: integer, example: 20 }
         pending_deliveries_count: { type: integer, example: 12 }
         internal_transfer_schedule_count: { type: integer, example: 10 }
+
+    stockSummaryResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/stockSummary"
 
     Receipt:
       type: object
@@ -1600,7 +1637,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductStockResponse"
+                $ref: "#/components/schemas/stockSummaryResponse"
         "500":
           $ref: "#/components/responses/InternalError"
 
