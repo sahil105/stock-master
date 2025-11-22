@@ -1,14 +1,31 @@
 import { useEffect, useState } from 'react';
-import { AppBar, Box, Button, Chip, Menu, MenuItem, Stack, Toolbar } from '@mui/material';
+import { 
+  AppBar, 
+  Avatar, 
+  Box, 
+  Button, 
+  Chip, 
+  Divider,
+  IconButton,
+  Menu, 
+  MenuItem, 
+  Stack, 
+  Toolbar,
+  Typography
+} from '@mui/material';
+import { AccountCircle, ExitToApp, Person } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LogoMark from './LogoMark';
 import { navSequence, operationsSubmenu, settingsSubmenu } from '../data/dashboardData';
+import { getUser, logout } from '../services/auth';
 
 function MainLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState(null);
+  const [profileAnchorEl, setProfileAnchorEl] = useState(null);
+  const [user, setUser] = useState(null);
   const [activeMain, setActiveMain] = useState('Dashboard');
   const isOperationsActive = operationsSubmenu.some((item) => item.path === location.pathname);
   const isSettingsActive = settingsSubmenu.some((item) => item.path === location.pathname);
@@ -24,6 +41,9 @@ function MainLayout({ children }) {
     } else if (isSettingsActive) {
       setActiveMain('Settings');
     }
+    // Load user data
+    const userData = getUser();
+    setUser(userData);
   }, [location.pathname, isOperationsActive, isSettingsActive]);
 
   const handleOperationsClick = (event) => {
@@ -52,6 +72,37 @@ function MainLayout({ children }) {
     setActiveMain('Settings');
     navigate(path);
     handleSettingsClose();
+  };
+
+  const handleProfileClick = (event) => {
+    setProfileAnchorEl(event.currentTarget);
+  };
+
+  const handleProfileClose = () => {
+    setProfileAnchorEl(null);
+  };
+
+  const handleProfileSelect = (action) => {
+    handleProfileClose();
+    if (action === 'profile') {
+      navigate('/profile');
+    } else if (action === 'logout') {
+      logout();
+    }
+  };
+
+  const getUserInitials = () => {
+    if (user?.email) {
+      return user.email.substring(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const getUserName = () => {
+    if (user?.email) {
+      return user.email.split('@')[0];
+    }
+    return 'User';
   };
 
   return (
@@ -150,9 +201,76 @@ function MainLayout({ children }) {
             >
               Notification
             </Button>
-            <Button variant="contained" color="secondary">
-              Logout
-            </Button>
+            <Box>
+              <IconButton
+                onClick={handleProfileClick}
+                aria-controls="profile-menu"
+                aria-haspopup="true"
+                sx={{
+                  bgcolor: 'secondary.main',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: 'secondary.dark',
+                  },
+                  width: 40,
+                  height: 40,
+                }}
+              >
+                <Avatar
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    bgcolor: 'rgba(255, 255, 255, 0.2)',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {getUserInitials()}
+                </Avatar>
+              </IconButton>
+              <Menu
+                id="profile-menu"
+                anchorEl={profileAnchorEl}
+                open={Boolean(profileAnchorEl)}
+                onClose={handleProfileClose}
+                elevation={6}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                PaperProps={{
+                  sx: {
+                    mt: 1.5,
+                    minWidth: 200,
+                    '& .MuiMenuItem-root': {
+                      px: 2,
+                      py: 1.5,
+                    },
+                  },
+                }}
+              >
+                <Box sx={{ px: 2, py: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {getUserName()}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {user?.email || 'user@example.com'}
+                  </Typography>
+                </Box>
+                <Divider />
+                <MenuItem onClick={() => handleProfileSelect('profile')}>
+                  <Person sx={{ mr: 1.5, fontSize: 20 }} />
+                  My Profile
+                </MenuItem>
+                <Divider />
+                <MenuItem 
+                  onClick={() => handleProfileSelect('logout')}
+                  sx={{ color: 'error.main' }}
+                >
+                  <ExitToApp sx={{ mr: 1.5, fontSize: 20 }} />
+                  Logout
+                </MenuItem>
+              </Menu>
+            </Box>
           </Stack>
         </Toolbar>
       </AppBar>

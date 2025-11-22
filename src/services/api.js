@@ -1,63 +1,10 @@
 /**
  * API service for communicating with the backend
+ * Legacy OTP functions - use authApi.js instead
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
-/**
- * Send OTP to email
- * @param {string} email - Email address to send OTP to
- * @returns {Promise<{success: boolean, message: string}>}
- */
-export const sendOTP = async (email) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/send-otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to send OTP');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error sending OTP:', error);
-    throw error;
-  }
-};
-
-/**
- * Verify OTP
- * @param {string} email - Email address
- * @param {string} otp - OTP code to verify
- * @returns {Promise<{success: boolean, message: string}>}
- */
-export const verifyOTP = async (email, otp) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/verify-otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, otp }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to verify OTP');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error verifying OTP:', error);
-    throw error;
-  }
-};
+// Re-export from authApi for backward compatibility
+export { requestOTP as sendOTP, verifyOTP } from './authApi';
 
 /**
  * Check if backend API is available
@@ -65,7 +12,8 @@ export const verifyOTP = async (email, otp) => {
  */
 export const checkAPIHealth = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/docs`, {
+    const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    const response = await fetch(`${API_BASE_URL}/`, {
       method: 'GET',
     });
     return response.ok;

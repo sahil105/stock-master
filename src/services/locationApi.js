@@ -1,33 +1,17 @@
 /**
  * Location API Service
  * 
- * API Endpoint: GET /api/locations
- * API Endpoint: POST /api/locations
- * 
- * POST Request Payload:
- * {
- *   "name": "string",
- *   "code": "string",
- *   "warehouse_id": 1
- * }
- * 
- * POST Response Structure:
- * {
- *   "data": {
- *     "id": 1,
- *     "name": "Main Warehouse",
- *     "code": "Mumbai01",
- *     "warehouse_id": 1,
- *     "created_at": "2025-11-22T07:09:09.162Z"
- *   }
- * }
+ * API Endpoint: GET /api/v1/warehouse_locations
+ * API Endpoint: POST /api/v1/warehouse_locations
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+import { getAuthHeaders } from './auth';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 /**
- * Get all locations
- * @param {Object} params - Query parameters (page, limit, etc.)
+ * Get all warehouse locations
+ * @param {Object} params - Query parameters (page, limit, warehouse_id)
  * @returns {Promise<Object>} API response with locations list
  */
 export const getLocations = async (params = {}) => {
@@ -35,25 +19,25 @@ export const getLocations = async (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
+    if (params.warehouse_id) queryParams.append('warehouse_id', params.warehouse_id);
     
-    const url = `${API_BASE_URL}/locations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    const url = `${API_BASE_URL}/warehouse_locations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
+        ...getAuthHeaders(),
       },
     });
 
     const data = await response.json();
 
-    // Handle 401 Unauthorized
     if (response.status === 401) {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
         data: [],
       };
@@ -63,16 +47,15 @@ export const getLocations = async (params = {}) => {
       return {
         success: false,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
         errors: data.errors || [],
         data: [],
       };
     }
 
-    // Handle paginated response structure
     return { 
       success: true, 
-      data: data.data || [], 
+      data: data.data || [],
       meta: data.meta || { total: 0, page: 1, limit: 25 }
     };
   } catch (error) {
@@ -89,46 +72,42 @@ export const getLocations = async (params = {}) => {
 };
 
 /**
- * Create a new location
+ * Create a new warehouse location
  * @param {Object} payload - Location data { name: string, code: string, warehouse_id: number }
  * @returns {Promise<Object>} API response
  */
 export const createLocation = async (payload) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/locations`, {
+    const response = await fetch(`${API_BASE_URL}/warehouse_locations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(payload),
     });
 
     const data = await response.json();
 
-    // Handle 401 Unauthorized
     if (response.status === 401) {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
       };
     }
 
-    // Handle 422 Validation Error
     if (response.status === 422) {
       return {
         success: false,
         statusCode: 422,
-        message: data.message || 'Validation error',
+        message: data.detail || data.message || 'Validation error',
         errors: data.errors || [],
-        meta: data.meta,
       };
     }
 
-    // Handle 201 Created Success
-    if (response.status === 201 || response.ok) {
+    if (response.ok) {
       return {
         success: true,
         statusCode: response.status,
@@ -136,17 +115,12 @@ export const createLocation = async (payload) => {
       };
     }
 
-    // Handle other errors
-    if (!response.ok) {
-      return {
-        success: false,
-        statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
-        errors: data.errors || [],
-      };
-    }
-
-    return { success: true, data: data.data || data };
+    return {
+      success: false,
+      statusCode: response.status,
+      message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      errors: data.errors || [],
+    };
   } catch (error) {
     console.error('Error creating location:', error);
     return {
@@ -158,3 +132,160 @@ export const createLocation = async (payload) => {
   }
 };
 
+/**
+ * Get a single warehouse location by ID
+ * @param {number} locationId - Location ID
+ * @returns {Promise<Object>} API response with location data
+ */
+export const getLocation = async (locationId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/warehouse_locations/${locationId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+      };
+    }
+
+    if (response.status === 404) {
+      return {
+        success: false,
+        statusCode: 404,
+        message: data.detail || data.message || 'Location not found',
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    return { success: true, data: data.data || data };
+  } catch (error) {
+    console.error('Error fetching location:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+    };
+  }
+};
+
+/**
+ * Update a warehouse location
+ * @param {number} locationId - Location ID
+ * @param {Object} payload - Updated location data
+ * @returns {Promise<Object>} API response
+ */
+export const updateLocation = async (locationId, payload) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/warehouse_locations/${locationId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+      };
+    }
+
+    if (response.status === 422) {
+      return {
+        success: false,
+        statusCode: 422,
+        message: data.detail || data.message || 'Validation error',
+        errors: data.errors || [],
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+      };
+    }
+
+    return { success: true, data: data.data || data };
+  } catch (error) {
+    console.error('Error updating location:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+    };
+  }
+};
+
+/**
+ * Delete a warehouse location
+ * @param {number} locationId - Location ID
+ * @returns {Promise<Object>} API response
+ */
+export const deleteLocation = async (locationId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/warehouse_locations/${locationId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    if (response.status === 204) {
+      return { success: true };
+    }
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting location:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+    };
+  }
+};

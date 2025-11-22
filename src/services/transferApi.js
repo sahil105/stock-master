@@ -1,7 +1,6 @@
 /**
- * Receipt API Service
- * 
- * API Endpoint: POST /api/v1/receipts
+ * Transfer API Service
+ * Handles inter-warehouse transfer operations
  */
 
 import { getAuthHeaders } from './auth';
@@ -9,13 +8,13 @@ import { getAuthHeaders } from './auth';
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 /**
- * Create a new receipt
- * @param {Object} payload - Receipt data matching API structure
+ * Create a new transfer
+ * @param {Object} payload - Transfer data
  * @returns {Promise<Object>} API response
  */
-export const createReceipt = async (payload) => {
+export const createTransfer = async (payload) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/receipts`, {
+    const response = await fetch(`${API_BASE_URL}/transfers`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -59,7 +58,7 @@ export const createReceipt = async (payload) => {
       errors: data.errors || [],
     };
   } catch (error) {
-    console.error('Error creating receipt:', error);
+    console.error('Error creating transfer:', error);
     return {
       success: false,
       statusCode: 0,
@@ -70,20 +69,21 @@ export const createReceipt = async (payload) => {
 };
 
 /**
- * Get all receipts
- * @param {Object} params - Query parameters (page, limit, search, warehouse_id, status)
- * @returns {Promise<Object>} API response with receipts list
+ * Get all transfers
+ * @param {Object} params - Query parameters (page, limit, search, warehouse_from, warehouse_to, status)
+ * @returns {Promise<Object>} API response with transfers list
  */
-export const getReceipts = async (params = {}) => {
+export const getTransfers = async (params = {}) => {
   try {
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.search) queryParams.append('search', params.search);
-    if (params.warehouse_id) queryParams.append('warehouse_id', params.warehouse_id);
+    if (params.warehouse_from) queryParams.append('warehouse_from', params.warehouse_from);
+    if (params.warehouse_to) queryParams.append('warehouse_to', params.warehouse_to);
     if (params.status) queryParams.append('status', params.status);
     
-    const url = `${API_BASE_URL}/receipts${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    const url = `${API_BASE_URL}/transfers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     
     const response = await fetch(url, {
       method: 'GET',
@@ -121,7 +121,7 @@ export const getReceipts = async (params = {}) => {
       meta: data.meta || { total: 0, page: 1, limit: 25 }
     };
   } catch (error) {
-    console.error('Error fetching receipts:', error);
+    console.error('Error fetching transfers:', error);
     return {
       success: false,
       statusCode: 0,
@@ -134,13 +134,13 @@ export const getReceipts = async (params = {}) => {
 };
 
 /**
- * Get a single receipt by ID
- * @param {number} receiptId - Receipt ID
- * @returns {Promise<Object>} API response with receipt data
+ * Get a single transfer by ID
+ * @param {number} transferId - Transfer ID
+ * @returns {Promise<Object>} API response with transfer data
  */
-export const getReceipt = async (receiptId) => {
+export const getTransfer = async (transferId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
+    const response = await fetch(`${API_BASE_URL}/transfers/${transferId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ export const getReceipt = async (receiptId) => {
       return {
         success: false,
         statusCode: 404,
-        message: data.detail || data.message || 'Receipt not found',
+        message: data.detail || data.message || 'Transfer not found',
       };
     }
 
@@ -176,7 +176,7 @@ export const getReceipt = async (receiptId) => {
 
     return { success: true, data: data.data || data };
   } catch (error) {
-    console.error('Error fetching receipt:', error);
+    console.error('Error fetching transfer:', error);
     return {
       success: false,
       statusCode: 0,
@@ -186,14 +186,14 @@ export const getReceipt = async (receiptId) => {
 };
 
 /**
- * Update a receipt
- * @param {number} receiptId - Receipt ID
- * @param {Object} payload - Updated receipt data
+ * Update a transfer
+ * @param {number} transferId - Transfer ID
+ * @param {Object} payload - Updated transfer data
  * @returns {Promise<Object>} API response
  */
-export const updateReceipt = async (receiptId, payload) => {
+export const updateTransfer = async (transferId, payload) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
+    const response = await fetch(`${API_BASE_URL}/transfers/${transferId}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -233,112 +233,12 @@ export const updateReceipt = async (receiptId, payload) => {
 
     return { success: true, data: data.data || data };
   } catch (error) {
-    console.error('Error updating receipt:', error);
+    console.error('Error updating transfer:', error);
     return {
       success: false,
       statusCode: 0,
       message: error.message || 'Network error. Please check your connection.',
       errors: [],
-    };
-  }
-};
-
-/**
- * Delete a receipt
- * @param {number} receiptId - Receipt ID
- * @returns {Promise<Object>} API response
- */
-export const deleteReceipt = async (receiptId) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
-    });
-
-    if (response.status === 204) {
-      return { success: true };
-    }
-
-    const data = await response.json();
-
-    if (response.status === 401) {
-      return {
-        success: false,
-        statusCode: 401,
-        message: data.detail || data.message || 'Unauthorized access. Please login again.',
-      };
-    }
-
-    if (!response.ok) {
-      return {
-        success: false,
-        statusCode: response.status,
-        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
-      };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error deleting receipt:', error);
-    return {
-      success: false,
-      statusCode: 0,
-      message: error.message || 'Network error. Please check your connection.',
-    };
-  }
-};
-
-/**
- * Validate receipt (moves to Done status and increases stock)
- * @param {number} receiptId - Receipt ID
- * @returns {Promise<Object>} API response
- */
-export const validateReceipt = async (receiptId) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/validate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
-    });
-
-    const data = await response.json();
-
-    if (response.status === 401) {
-      return {
-        success: false,
-        statusCode: 401,
-        message: data.detail || data.message || 'Unauthorized access. Please login again.',
-      };
-    }
-
-    if (response.status === 422) {
-      return {
-        success: false,
-        statusCode: 422,
-        message: data.detail || data.message || 'Validation error',
-      };
-    }
-
-    if (!response.ok) {
-      return {
-        success: false,
-        statusCode: response.status,
-        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
-      };
-    }
-
-    return { success: true, data: data.data || data };
-  } catch (error) {
-    console.error('Error validating receipt:', error);
-    return {
-      success: false,
-      statusCode: 0,
-      message: error.message || 'Network error. Please check your connection.',
     };
   }
 };

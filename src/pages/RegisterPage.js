@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -15,6 +16,7 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import LogoMark from '../components/LogoMark';
+import { register } from '../services/authApi';
 
 function RegisterPage() {
   const navigate = useNavigate();
@@ -27,6 +29,8 @@ function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   const togglePassword = () => setShowPassword((prev) => !prev);
   const toggleConfirmPassword = () => setShowConfirmPassword((prev) => !prev);
@@ -59,10 +63,31 @@ function RegisterPage() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleRegister = (event) => {
+  const handleRegister = async (event) => {
     event.preventDefault();
+    setApiError('');
     if (!validate()) return;
-    navigate('/dashboard');
+
+    setLoading(true);
+    try {
+      const response = await register({
+        email: values.email,
+        password: values.password,
+        user_id: values.loginId || undefined,
+      });
+
+      if (response.success) {
+        // Navigate to dashboard on success
+        navigate('/dashboard');
+      } else {
+        setApiError(response.message || 'Registration failed. Please try again.');
+      }
+    } catch (err) {
+      setApiError('An error occurred. Please try again.');
+      console.error('Registration error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChange = (field) => (event) => {
@@ -88,15 +113,20 @@ function RegisterPage() {
 
           <Box component="form" onSubmit={handleRegister}>
             <Stack spacing={2}>
+              {apiError && (
+                <Alert severity="error" onClose={() => setApiError('')}>
+                  {apiError}
+                </Alert>
+              )}
               <TextField
                 variant="filled"
-                label="Login ID"
-                required
+                label="Login ID (Optional)"
                 fullWidth
                 value={values.loginId}
                 onChange={handleChange('loginId')}
                 error={Boolean(errors.loginId)}
                 helperText={errors.loginId}
+                disabled={loading}
                 InputProps={{ sx: { background: 'rgba(255,255,255,0.08)' } }}
               />
               <TextField
@@ -109,6 +139,7 @@ function RegisterPage() {
                 onChange={handleChange('email')}
                 error={Boolean(errors.email)}
                 helperText={errors.email}
+                disabled={loading}
                 InputProps={{ sx: { background: 'rgba(255,255,255,0.08)' } }}
               />
               <TextField
@@ -121,11 +152,12 @@ function RegisterPage() {
                 onChange={handleChange('password')}
                 error={Boolean(errors.password)}
                 helperText={errors.password}
+                disabled={loading}
                 InputProps={{
                   sx: { background: 'rgba(255,255,255,0.08)' },
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton onClick={togglePassword} edge="end">
+                      <IconButton onClick={togglePassword} edge="end" disabled={loading}>
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
                     </InputAdornment>
@@ -142,11 +174,12 @@ function RegisterPage() {
                 onChange={handleChange('confirmPassword')}
                 error={Boolean(errors.confirmPassword)}
                 helperText={errors.confirmPassword}
+                disabled={loading}
                 InputProps={{
                   sx: { background: 'rgba(255,255,255,0.08)' },
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton onClick={toggleConfirmPassword} edge="end">
+                      <IconButton onClick={toggleConfirmPassword} edge="end" disabled={loading}>
                         {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
                     </InputAdornment>
@@ -169,8 +202,14 @@ function RegisterPage() {
                   ))}
                 </Stack>
               </Box>
-              <Button variant="contained" color="secondary" fullWidth type="submit">
-                Sign Up
+              <Button 
+                variant="contained" 
+                color="secondary" 
+                fullWidth 
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? 'Signing up...' : 'Sign Up'}
               </Button>
             </Stack>
           </Box>

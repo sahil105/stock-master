@@ -328,14 +328,34 @@ function ProductsPage() {
           </Typography>
           {viewMode === 'list' ? (
             <Box sx={{ height: 320 }}>
-              <DataGrid 
-                rows={filteredProducts} 
-                columns={columns} 
-                hideFooter 
-                density="compact" 
-                disableRowSelectionOnClick
-                loading={productsLoading}
-              />
+              {!productsLoading && filteredProducts.length === 0 ? (
+                <Box
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  <Typography variant="h6" color="text.secondary">
+                    No products found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {searchQuery ? 'Try adjusting your search or create a new product.' : 'Create a new product to get started.'}
+                  </Typography>
+                </Box>
+              ) : (
+                <DataGrid 
+                  rows={filteredProducts} 
+                  columns={columns} 
+                  hideFooter 
+                  density="compact" 
+                  disableRowSelectionOnClick
+                  loading={productsLoading}
+                />
+              )}
             </Box>
           ) : (
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', minHeight: 320 }}>

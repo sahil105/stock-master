@@ -1,13 +1,81 @@
-import { useState, useMemo } from 'react';
-import { Box, Button, InputAdornment, Paper, Stack, TextField, Typography } from '@mui/material';
+import { useState, useMemo, useEffect } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  InputAdornment,
+  Paper,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { Search } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
-import { stock } from '../data/dashboardData';
 import { DataGrid } from '@mui/x-data-grid';
+import { getStock } from '../services/stockApi';
 
 function StockPage() {
-  const [rows, setRows] = useState(stock);
+  const [rows, setRows] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
+
+  useEffect(() => {
+    fetchStock();
+  }, []);
+
+  const fetchStock = async () => {
+    setLoading(true);
+    try {
+      const response = await getStock();
+      if (response.success) {
+        // Map API data to match component expectations
+        // Backend returns: { data: [{ id, name, sku, on_hand, reserved, free_to_use, ... }] }
+        const mappedStock = response.data.map((item) => ({
+          id: item.id,
+          product: item.name || 'Unknown Product',
+          perUnitCost: 0, // Cost not available in stock endpoint
+          onHand: item.on_hand || 0,
+          freeToUse: item.free_to_use || (item.on_hand - (item.reserved || 0)) || 0,
+          warehouse: item.warehouse_name || `Warehouse ${item.warehouse_id}`,
+          sku: item.sku || 'N/A',
+          reserved: item.reserved || 0,
+          ...item,
+        }));
+        setRows(mappedStock);
+      } else {
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+        } else {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Failed to load stock.',
+            severity: 'error',
+          });
+        }
+        setRows([]);
+      }
+    } catch (error) {
+      console.error('Error fetching stock:', error);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while loading stock.',
+        severity: 'error',
+      });
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter stock based on search query
   const filteredRows = useMemo(() => {
@@ -86,10 +154,16 @@ function StockPage() {
                 ),
               }}
             />
-            <Button variant="outlined" onClick={() => setRows(stock)}>
-              Reset
+            <Button variant="outlined" onClick={fetchStock}>
+              Refresh
             </Button>
-            <Button variant="contained" onClick={() => console.log('Saving stock updates...', rows)}>
+            <Button variant="contained" onClick={() => {
+              setSnackbar({
+                open: true,
+                message: 'Stock update functionality will be implemented via adjustments.',
+                severity: 'info',
+              });
+            }}>
               Save Changes
             </Button>
           </Stack>
@@ -103,29 +177,60 @@ function StockPage() {
             User must be able to update the stock from here. Click on editable cells to modify values.
           </Typography>
           <Box sx={{ height: 400 }}>
-            <DataGrid
-              rows={filteredRows}
-              columns={columns}
-              hideFooter
-              density="compact"
-              processRowUpdate={processRowUpdate}
-              disableRowSelectionOnClick
-              sx={{
-                '& .MuiDataGrid-cell:editable': {
-                  backgroundColor: 'rgba(37, 52, 148, 0.05)',
-                  cursor: 'pointer',
-                  '&:hover': {
-                    backgroundColor: 'rgba(37, 52, 148, 0.1)',
+            {!loading && filteredRows.length === 0 ? (
+              <Box
+                sx={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 2,
+                }}
+              >
+                <Typography variant="h6" color="text.secondary">
+                  No stock data found
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {searchQuery ? 'Try adjusting your search.' : 'Stock data will appear here once products are added and stock is updated.'}
+                </Typography>
+              </Box>
+            ) : (
+              <DataGrid
+                rows={filteredRows}
+                columns={columns}
+                hideFooter
+                density="compact"
+                loading={loading}
+                processRowUpdate={processRowUpdate}
+                disableRowSelectionOnClick
+                sx={{
+                  '& .MuiDataGrid-cell:editable': {
+                    backgroundColor: 'rgba(37, 52, 148, 0.05)',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      backgroundColor: 'rgba(37, 52, 148, 0.1)',
+                    },
                   },
-                },
-                '& .MuiDataGrid-cell:focus': {
-                  outline: '2px solid #253494',
-                },
-              }}
-            />
+                  '& .MuiDataGrid-cell:focus': {
+                    outline: '2px solid #253494',
+                  },
+                }}
+              />
+            )}
           </Box>
         </Paper>
       </Stack>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </MainLayout>
   );
 }

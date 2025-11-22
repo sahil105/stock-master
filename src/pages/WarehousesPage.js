@@ -203,6 +203,24 @@ function WarehousesPage() {
             <Box sx={{ height: 400, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <Typography>Loading warehouses...</Typography>
             </Box>
+          ) : warehousesData.length === 0 ? (
+            <Box
+              sx={{
+                height: 400,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              <Typography variant="h6" color="text.secondary">
+                No warehouses found
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Create a new warehouse to get started.
+              </Typography>
+            </Box>
           ) : (
             <Box sx={{ height: 400 }}>
               <DataGrid

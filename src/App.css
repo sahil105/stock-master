@@ -35,6 +35,9 @@ body {
 .layout-root {
   min-height: 100vh;
   background: #f5f6fb;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 .top-nav {
@@ -43,6 +46,7 @@ body {
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.15);
   z-index: 1100;
   position: relative;
+  width: 100%;
 }
 
 .nav-links button {
@@ -56,6 +60,10 @@ body {
   padding-left: 32px;
   padding-right: 32px;
   min-height: 64px;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .top-nav .logo-mark-text {
@@ -91,6 +99,16 @@ body {
   gap: 16px;
   background: #f5f6fb;
   min-height: calc(100vh - 64px);
+  width: 100%;
+  max-width: 1600px;
+  margin-left: auto;
+  margin-right: auto;
+  align-items: stretch;
+}
+
+.main-panel > * {
+  width: 100%;
+  max-width: 100%;
 }
 
 .top-nav .MuiButton-root:hover {
@@ -132,6 +150,12 @@ body {
 @media (max-width: 960px) {
   .main-panel {
     padding: 16px;
+    max-width: 100%;
+  }
+  .top-nav .MuiToolbar-root {
+    padding-left: 16px;
+    padding-right: 16px;
+    max-width: 100%;
   }
   .nav-links {
     display: none;

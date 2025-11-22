@@ -150,6 +150,24 @@ function CategoriesPage() {
             <Box sx={{ height: 400, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <Typography>Loading categories...</Typography>
             </Box>
+          ) : filteredCategories.length === 0 ? (
+            <Box
+              sx={{
+                height: 400,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              <Typography variant="h6" color="text.secondary">
+                No categories found
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {searchQuery ? 'Try adjusting your search or create a new category.' : 'Create a new category to get started.'}
+              </Typography>
+            </Box>
           ) : (
             <Box sx={{ height: 400 }}>
               <DataGrid

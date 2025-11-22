@@ -1,31 +1,16 @@
 /**
  * Category API Service
  * 
- * API Endpoint: GET /api/product-categories
- * 
- * Response Structure:
- * {
- *   "meta": {
- *     "total": 120,
- *     "page": 1,
- *     "limit": 25
- *   },
- *   "data": [
- *     {
- *       "id": 2,
- *       "name": "Metals",
- *       "created_at": "2025-11-22T06:45:07.597Z"
- *     }
- *   ]
- * }
+ * API Endpoint: GET /api/v1/product-categories
  */
 
-// TODO: Replace with actual API base URL
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+import { getAuthHeaders } from './auth';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 /**
  * Get all product categories
- * @param {Object} params - Query parameters (page, limit, etc.)
+ * @param {Object} params - Query parameters (page, limit, search)
  * @returns {Promise<Object>} API response with categories list
  */
 export const getCategories = async (params = {}) => {
@@ -33,6 +18,7 @@ export const getCategories = async (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
+    if (params.search) queryParams.append('search', params.search);
     
     const url = `${API_BASE_URL}/product-categories${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     
@@ -40,37 +26,36 @@ export const getCategories = async (params = {}) => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
-        // 'Authorization': `Bearer ${getAuthToken()}`,
+        ...getAuthHeaders(),
       },
     });
 
     const data = await response.json();
 
-    // Handle 401 Unauthorized
     if (response.status === 401) {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
+        data: [],
       };
     }
 
-    // Handle other errors
     if (!response.ok) {
       return {
         success: false,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
         errors: data.errors || [],
+        data: [],
       };
     }
 
     return { 
       success: true, 
-      data: data.data || [], 
-      meta: data.meta 
+      data: data.data || [],
+      meta: data.meta || { total: 0, page: 1, limit: 25 }
     };
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -86,7 +71,7 @@ export const getCategories = async (params = {}) => {
 
 /**
  * Create a new category
- * @param {Object} payload - Category data { name: string }
+ * @param {Object} payload - Category data { name: string, description?: string, is_active?: boolean }
  * @returns {Promise<Object>} API response
  */
 export const createCategory = async (payload) => {
@@ -95,44 +80,45 @@ export const createCategory = async (payload) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(payload),
     });
 
     const data = await response.json();
 
-    // Handle 401 Unauthorized
     if (response.status === 401) {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
       };
     }
 
-    // Handle 422 Validation Error
     if (response.status === 422) {
       return {
         success: false,
         statusCode: 422,
-        message: data.message || 'Validation error',
+        message: data.detail || data.message || 'Validation error',
         errors: data.errors || [],
-        meta: data.meta,
       };
     }
 
-    if (!response.ok) {
+    if (response.ok) {
       return {
-        success: false,
+        success: true,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
-        errors: data.errors || [],
+        data: data.data || data,
       };
     }
 
-    return { success: true, data };
+    return {
+      success: false,
+      statusCode: response.status,
+      message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      errors: data.errors || [],
+    };
   } catch (error) {
     console.error('Error creating category:', error);
     return {
@@ -144,3 +130,160 @@ export const createCategory = async (payload) => {
   }
 };
 
+/**
+ * Get a single category by ID
+ * @param {number} categoryId - Category ID
+ * @returns {Promise<Object>} API response with category data
+ */
+export const getCategory = async (categoryId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/product-categories/${categoryId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+      };
+    }
+
+    if (response.status === 404) {
+      return {
+        success: false,
+        statusCode: 404,
+        message: data.detail || data.message || 'Category not found',
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    return { success: true, data: data.data || data };
+  } catch (error) {
+    console.error('Error fetching category:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+    };
+  }
+};
+
+/**
+ * Update a category
+ * @param {number} categoryId - Category ID
+ * @param {Object} payload - Updated category data
+ * @returns {Promise<Object>} API response
+ */
+export const updateCategory = async (categoryId, payload) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/product-categories/${categoryId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+      };
+    }
+
+    if (response.status === 422) {
+      return {
+        success: false,
+        statusCode: 422,
+        message: data.detail || data.message || 'Validation error',
+        errors: data.errors || [],
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+      };
+    }
+
+    return { success: true, data: data.data || data };
+  } catch (error) {
+    console.error('Error updating category:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+    };
+  }
+};
+
+/**
+ * Delete a category
+ * @param {number} categoryId - Category ID
+ * @returns {Promise<Object>} API response
+ */
+export const deleteCategory = async (categoryId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/product-categories/${categoryId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    if (response.status === 204) {
+      return { success: true };
+    }
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+    };
+  }
+};

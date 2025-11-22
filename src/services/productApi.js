@@ -1,7 +1,7 @@
 /**
  * Product API Service
  * 
- * API Endpoint: POST /api/products
+ * API Endpoint: POST /api/v1/products
  * 
  * Request Payload:
  * {
@@ -14,8 +14,9 @@
  * }
  */
 
-// TODO: Replace with actual API base URL
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+import { getAuthHeaders } from './auth';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 /**
  * Create a new product
@@ -28,8 +29,7 @@ export const createProduct = async (payload) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
-        // 'Authorization': `Bearer ${getAuthToken()}`,
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(payload),
     });
@@ -41,7 +41,7 @@ export const createProduct = async (payload) => {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
       };
     }
@@ -51,23 +51,28 @@ export const createProduct = async (payload) => {
       return {
         success: false,
         statusCode: 422,
-        message: data.message || 'Validation error',
+        message: data.detail || data.message || 'Validation error',
         errors: data.errors || [],
         meta: data.meta,
       };
     }
 
-    // Handle other errors
-    if (!response.ok) {
+    // Handle success (201 Created)
+    if (response.ok) {
       return {
-        success: false,
+        success: true,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
-        errors: data.errors || [],
+        data: data.data || data,
       };
     }
 
-    return { success: true, data };
+    // Handle other errors
+    return {
+      success: false,
+      statusCode: response.status,
+      message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      errors: data.errors || [],
+    };
   } catch (error) {
     console.error('Error creating product:', error);
     return {
@@ -80,8 +85,67 @@ export const createProduct = async (payload) => {
 };
 
 /**
+ * Get a single product by ID
+ * @param {number} productId - Product ID
+ * @returns {Promise<Object>} API response with product data
+ */
+export const getProduct = async (productId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    const data = await response.json();
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+      };
+    }
+
+    // Handle 404 Not Found
+    if (response.status === 404) {
+      return {
+        success: false,
+        statusCode: 404,
+        message: data.detail || data.message || 'Product not found',
+        errors: [],
+      };
+    }
+
+    // Handle other errors
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+      };
+    }
+
+    return { success: true, data: data.data || data };
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+    };
+  }
+};
+
+/**
  * Get all products
- * @param {Object} params - Query parameters (page, limit, etc.)
+ * @param {Object} params - Query parameters (page, limit, search, warehouse_id)
  * @returns {Promise<Object>} API response with products list
  * 
  * Expected API Response Structure:
@@ -109,6 +173,7 @@ export const getProducts = async (params = {}) => {
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.search) queryParams.append('search', params.search);
+    if (params.warehouse_id) queryParams.append('warehouse_id', params.warehouse_id);
     
     const url = `${API_BASE_URL}/products${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     
@@ -116,8 +181,7 @@ export const getProducts = async (params = {}) => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
-        // 'Authorization': `Bearer ${getAuthToken()}`,
+        ...getAuthHeaders(),
       },
     });
 
@@ -128,7 +192,7 @@ export const getProducts = async (params = {}) => {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
         data: [],
       };
@@ -139,16 +203,16 @@ export const getProducts = async (params = {}) => {
       return {
         success: false,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
         errors: data.errors || [],
         data: [],
       };
     }
 
-    // Handle paginated response structure
+    // Backend returns: { data: [...], meta: { total, page, limit } }
     return { 
       success: true, 
-      data: data.data || [], 
+      data: data.data || [],
       meta: data.meta || { total: 0, page: 1, limit: 25 }
     };
   } catch (error) {
@@ -173,10 +237,10 @@ export const getProducts = async (params = {}) => {
 export const updateProduct = async (productId, payload) => {
   try {
     const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(payload),
     });
@@ -188,7 +252,7 @@ export const updateProduct = async (productId, payload) => {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
       };
     }
@@ -198,7 +262,7 @@ export const updateProduct = async (productId, payload) => {
       return {
         success: false,
         statusCode: 422,
-        message: data.message || 'Validation error',
+        message: data.detail || data.message || 'Validation error',
         errors: data.errors || [],
         meta: data.meta,
       };
@@ -208,12 +272,12 @@ export const updateProduct = async (productId, payload) => {
       return {
         success: false,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
         errors: data.errors || [],
       };
     }
 
-    return { success: true, data };
+    return { success: true, data: data.data || data };
   } catch (error) {
     console.error('Error updating product:', error);
     return {
@@ -236,9 +300,14 @@ export const deleteProduct = async (productId) => {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
+        ...getAuthHeaders(),
       },
     });
+
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return { success: true };
+    }
 
     const data = await response.json();
 
@@ -247,7 +316,7 @@ export const deleteProduct = async (productId) => {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
       };
     }
@@ -256,7 +325,7 @@ export const deleteProduct = async (productId) => {
       return {
         success: false,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
         errors: data.errors || [],
       };
     }
@@ -273,3 +342,55 @@ export const deleteProduct = async (productId) => {
   }
 };
 
+/**
+ * Get product stock per warehouse
+ * @returns {Promise<Object>} API response with stock data
+ */
+export const getProductStock = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/products_stock`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    const data = await response.json();
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+        data: [],
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+        data: [],
+      };
+    }
+
+    return { 
+      success: true, 
+      data: data.data || []
+    };
+  } catch (error) {
+    console.error('Error fetching product stock:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+      data: [],
+    };
+  }
+};

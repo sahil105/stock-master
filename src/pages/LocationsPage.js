@@ -256,6 +256,24 @@ function LocationsPage() {
             <Box sx={{ height: 400, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <Typography>Loading locations...</Typography>
             </Box>
+          ) : locationsData.length === 0 ? (
+            <Box
+              sx={{
+                height: 400,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              <Typography variant="h6" color="text.secondary">
+                No locations found
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Create a new location to get started.
+              </Typography>
+            </Box>
           ) : (
             <Box sx={{ height: 400 }}>
               <DataGrid

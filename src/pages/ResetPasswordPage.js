@@ -9,22 +9,59 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { requestOTP, verifyOTP } from '../services/authApi';
 
 function ResetPasswordPage() {
   const [otpRequested, setOtpRequested] = useState(false);
-  const [confirmation, setConfirmation] = useState('');
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const navigate = useNavigate();
 
-  const handleRequestOtp = (event) => {
+  const handleRequestOtp = async (event) => {
     event.preventDefault();
-    setOtpRequested(true);
-    setConfirmation('OTP sent to your email. Use the 6-digit code to confirm.');
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const response = await requestOTP({ email });
+      if (response.success) {
+        setOtpRequested(true);
+        setSuccess(`OTP sent to your email.${response.otp ? ` OTP: ${response.otp}` : ''}`);
+      } else {
+        setError(response.message || 'Failed to send OTP');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+      console.error('Request OTP error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReset = (event) => {
+  const handleReset = async (event) => {
     event.preventDefault();
-    setConfirmation('Password reset! Redirecting to login…');
-    setTimeout(() => navigate('/login'), 1400);
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const response = await verifyOTP({ email, otp });
+      if (response.success) {
+        setSuccess('OTP verified successfully! Redirecting to login…');
+        setTimeout(() => navigate('/login'), 1400);
+      } else {
+        setError(response.message || 'OTP verification failed');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+      console.error('Verify OTP error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,20 +73,36 @@ function ResetPasswordPage() {
         <Typography color="text.secondary" sx={{ mb: 2 }}>
           Enter the email linked to your account and we will send a one-time password to continue.
         </Typography>
-        {confirmation && <Alert severity="info">{confirmation}</Alert>}
+        {success && <Alert severity="success">{success}</Alert>}
+        {error && <Alert severity="error">{error}</Alert>}
 
         <Box component="form" onSubmit={otpRequested ? handleReset : handleRequestOtp} sx={{ mt: 2 }}>
           <Stack spacing={2}>
-            <TextField label="Email" type="email" required fullWidth disabled={otpRequested} />
+            <TextField 
+              label="Email" 
+              type="email" 
+              required 
+              fullWidth 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={otpRequested || loading} 
+            />
             {otpRequested && (
               <>
-                <TextField label="OTP code" type="text" required fullWidth inputProps={{ maxLength: 6 }} />
-                <TextField label="New password" type="password" required fullWidth />
-                <TextField label="Confirm password" type="password" required fullWidth />
+                <TextField 
+                  label="OTP code" 
+                  type="text" 
+                  required 
+                  fullWidth 
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  inputProps={{ maxLength: 6 }}
+                  disabled={loading}
+                />
               </>
             )}
-            <Button variant="contained" fullWidth type="submit">
-              {otpRequested ? 'Reset password' : 'Request OTP'}
+            <Button variant="contained" fullWidth type="submit" disabled={loading}>
+              {loading ? 'Processing...' : (otpRequested ? 'Verify OTP' : 'Request OTP')}
             </Button>
           </Stack>
         </Box>

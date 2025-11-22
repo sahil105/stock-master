@@ -15,6 +15,7 @@ import WarehousesPage from './pages/WarehousesPage';
 import LocationsPage from './pages/LocationsPage';
 import StockPage from './pages/StockPage';
 import SettingsPage from './pages/SettingsPage';
+import ProfilePage from './pages/ProfilePage';
 import CategoriesPage from './pages/CategoriesPage';
 import NotificationsPage from './pages/NotificationsPage';
 
@@ -53,6 +54,7 @@ function App() {
           <Route path="/locations" element={<LocationsPage />} />
           <Route path="/stock" element={<StockPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="*" element={<Navigate replace to="/dashboard" />} />

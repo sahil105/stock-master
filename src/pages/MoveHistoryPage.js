@@ -160,45 +160,85 @@ function MoveHistoryPage() {
           </Typography>
           {viewMode === 'list' ? (
             <Box sx={{ height: 400 }}>
-              <DataGrid
-                rows={filteredMoveHistory.map((row, index) => ({
-                  id: row.id || `${row.reference}-${index}`,
-                  ...row,
-                }))}
-                columns={columns}
-                hideFooter
-                density="compact"
-                onRowClick={handleRowClick}
-                getRowClassName={(params) => {
-                  const moveType = getMoveType(params.row.reference);
-                  if (moveType === 'inbound') {
-                    return 'inbound-move-row';
-                  } else if (moveType === 'outbound') {
-                    return 'outbound-move-row';
-                  }
-                  return '';
-                }}
-                sx={{
-                  '& .inbound-move-row': {
-                    backgroundColor: 'rgba(46, 125, 50, 0.08)',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      backgroundColor: 'rgba(46, 125, 50, 0.12)',
+              {filteredMoveHistory.length === 0 ? (
+                <Box
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  <Typography variant="h6" color="text.secondary">
+                    No move history found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Movement history will appear here once transactions are processed.
+                  </Typography>
+                </Box>
+              ) : (
+                <DataGrid
+                  rows={filteredMoveHistory.map((row, index) => ({
+                    id: row.id || `${row.reference}-${index}`,
+                    ...row,
+                  }))}
+                  columns={columns}
+                  hideFooter
+                  density="compact"
+                  onRowClick={handleRowClick}
+                  getRowClassName={(params) => {
+                    const moveType = getMoveType(params.row.reference);
+                    if (moveType === 'inbound') {
+                      return 'inbound-move-row';
+                    } else if (moveType === 'outbound') {
+                      return 'outbound-move-row';
+                    }
+                    return '';
+                  }}
+                  sx={{
+                    '& .inbound-move-row': {
+                      backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: 'rgba(46, 125, 50, 0.12)',
+                      },
                     },
-                  },
-                  '& .outbound-move-row': {
-                    backgroundColor: 'rgba(211, 47, 47, 0.08)',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      backgroundColor: 'rgba(211, 47, 47, 0.12)',
+                    '& .outbound-move-row': {
+                      backgroundColor: 'rgba(211, 47, 47, 0.08)',
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: 'rgba(211, 47, 47, 0.12)',
+                      },
                     },
-                  },
-                }}
-              />
+                  }}
+                />
+              )}
             </Box>
           ) : (
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 320 }}>
-              {filteredMoveHistory.map((move, index) => {
+              {filteredMoveHistory.length === 0 ? (
+                <Box
+                  sx={{
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 2,
+                    minHeight: 320,
+                  }}
+                >
+                  <Typography variant="h6" color="text.secondary">
+                    No move history found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Movement history will appear here once transactions are processed.
+                  </Typography>
+                </Box>
+              ) : (
+                filteredMoveHistory.map((move, index) => {
                 const moveType = getMoveType(move.reference);
                 return (
                   <Paper
@@ -252,7 +292,8 @@ function MoveHistoryPage() {
                     )}
                   </Paper>
                 );
-              })}
+                })
+              )}
             </Box>
           )}
         </Paper>

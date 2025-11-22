@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Button,
   Divider,
@@ -14,16 +15,38 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import LogoMark from '../components/LogoMark';
+import { login } from '../services/authApi';
 
 function LoginPage() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const togglePassword = () => setShowPassword((prev) => !prev);
 
-  const handleLogin = (event) => {
+  const handleLogin = async (event) => {
     event.preventDefault();
-    navigate('/dashboard');
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await login({ email, password });
+      
+      if (response.success) {
+        // Navigate to dashboard on success
+        navigate('/dashboard');
+      } else {
+        setError(response.message || 'Login failed. Please check your credentials.');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+      console.error('Login error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -44,11 +67,20 @@ function LoginPage() {
 
           <Box component="form" onSubmit={handleLogin}>
             <Stack spacing={2}>
+              {error && (
+                <Alert severity="error" onClose={() => setError('')}>
+                  {error}
+                </Alert>
+              )}
               <TextField
                 variant="filled"
-                label="Login ID"
+                label="Email"
+                type="email"
                 required
                 fullWidth
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
                 InputProps={{ sx: { background: 'rgba(255,255,255,0.08)' } }}
               />
               <TextField
@@ -57,19 +89,28 @@ function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 required
                 fullWidth
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
                 InputProps={{
                   sx: { background: 'rgba(255,255,255,0.08)' },
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton onClick={togglePassword} edge="end">
+                      <IconButton onClick={togglePassword} edge="end" disabled={loading}>
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
                     </InputAdornment>
                   ),
                 }}
               />
-              <Button variant="contained" color="secondary" fullWidth type="submit">
-                Sign In
+              <Button 
+                variant="contained" 
+                color="secondary" 
+                fullWidth 
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? 'Signing in...' : 'Sign In'}
               </Button>
             </Stack>
           </Box>

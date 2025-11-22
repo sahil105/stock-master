@@ -95,7 +95,18 @@ function ReceiptsPage() {
         search: searchQuery,
       });
       if (response.success) {
-        setReceiptsData(response.data || []);
+        // Map backend data to frontend format
+        const mappedReceipts = (response.data || []).map((receipt) => ({
+          ...receipt,
+          id: receipt.id,
+          reference: receipt.ref_no || `REC-${receipt.id}`,
+          from: receipt.vendor_name || 'Vendor',
+          to: receipt.warehouse_id ? `Warehouse ${receipt.warehouse_id}` : 'Warehouse',
+          contact: receipt.contact || 'N/A',
+          scheduleDate: receipt.created_at ? new Date(receipt.created_at).toLocaleDateString() : 'N/A',
+          status: receipt.status || 'Draft',
+        }));
+        setReceiptsData(mappedReceipts);
         setReceiptsMeta(response.meta || { total: 0, page: 1, limit: 25 });
       } else {
         if (response.statusCode === 401) {
@@ -126,8 +137,19 @@ function ReceiptsPage() {
     }
   };
 
-  // Use receiptsData directly (filtering is done on server side via search parameter)
-  const filteredReceipts = receiptsData;
+  // Filter receipts based on search query (reference and contact)
+  const filteredReceipts = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return receiptsData;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return receiptsData.filter(
+      (receipt) =>
+        receipt.reference?.toLowerCase().includes(query) ||
+        receipt.contact?.toLowerCase().includes(query) ||
+        receipt.from?.toLowerCase().includes(query)
+    );
+  }, [receiptsData, searchQuery]);
   const columns = [
     { field: 'reference', headerName: 'Reference', flex: 1 },
     { field: 'from', headerName: 'From', flex: 1 },
@@ -275,21 +297,61 @@ function ReceiptsPage() {
           </Typography>
           {viewMode === 'list' ? (
             <Box sx={{ height: 320 }}>
-              <DataGrid
-                rows={filteredReceipts.map((row) => ({ id: row.reference, ...row }))}
-                columns={columns}
-                hideFooter
-                density="compact"
-                onRowClick={(params) => {
-                  setSelected(params.row);
-                  setDetailDialogOpen(true);
-                }}
-                loading={receiptsLoading}
-              />
+              {!receiptsLoading && filteredReceipts.length === 0 ? (
+                <Box
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  <Typography variant="h6" color="text.secondary">
+                    No receipts found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {searchQuery ? 'Try adjusting your search or create a new receipt.' : 'Create a new receipt to get started.'}
+                  </Typography>
+                </Box>
+              ) : (
+                <DataGrid
+                  rows={filteredReceipts.map((row) => ({ id: row.reference, ...row }))}
+                  columns={columns}
+                  hideFooter
+                  density="compact"
+                  onRowClick={(params) => {
+                    setSelected(params.row);
+                    setDetailDialogOpen(true);
+                  }}
+                  loading={receiptsLoading}
+                />
+              )}
             </Box>
           ) : (
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 320 }}>
-              {filteredReceipts.map((receipt) => (
+              {!receiptsLoading && filteredReceipts.length === 0 ? (
+                <Box
+                  sx={{
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 2,
+                    minHeight: 320,
+                  }}
+                >
+                  <Typography variant="h6" color="text.secondary">
+                    No receipts found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {searchQuery ? 'Try adjusting your search or create a new receipt.' : 'Create a new receipt to get started.'}
+                  </Typography>
+                </Box>
+              ) : (
+                filteredReceipts.map((receipt) => (
                 <Paper
                   key={receipt.reference}
                   elevation={3}
@@ -320,7 +382,8 @@ function ReceiptsPage() {
                     Schedule {receipt.scheduleDate} · Status {receipt.status}
                   </Typography>
                 </Paper>
-              ))}
+                ))
+              )}
             </Box>
           )}
           <PaginationControls

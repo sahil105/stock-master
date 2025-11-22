@@ -11,26 +11,52 @@ from datetime import datetime, UTC, timedelta
 from jose import jwt, JWTError
 from enum import Enum
 
+from typing import Optional, List
+from datetime import datetime, timedelta, UTC
+from jose import JWTError, jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 import mysql.connector
 from mysql.connector import pooling
 import os
 from dotenv import load_dotenv
 import random
 import string
-import bcrypt
+# bcrypt import removed - using Argon2 instead
+# import bcrypt
 
 load_dotenv()
 
-# Configuration
+# =========================
+# CONFIGURATION
+# =========================
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 OTP_EXPIRE_MINUTES = 5
 
-# Database Configuration
+# =========================
+# DATABASE CONFIGURATION
+# =========================
+def parse_db_host(host_str: str) -> tuple[str, int]:
+    """Parse DB_HOST to extract hostname and port, handling tcp:// prefix"""
+    if not host_str:
+        return "localhost", 3306
+    host_str = host_str.replace("tcp://", "").replace("TCP://", "").replace("Tcp://", "")
+    if ":" in host_str:
+        host, port_str = host_str.rsplit(":", 1)
+        try:
+            port = int(port_str)
+            return host, port
+        except ValueError:
+            return host_str, int(os.getenv("DB_PORT", 3306))
+    return host_str, int(os.getenv("DB_PORT", 3306))
+
+db_host, db_port = parse_db_host(os.getenv("DB_HOST", "localhost"))
+
 DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", 3306)),
+    "host": db_host,
+    "port": db_port,
     "user": os.getenv("DB_USER", "team_maven"),
     "password": os.getenv("DB_PASSWORD", "maven@123"),
     "database": os.getenv("DB_NAME", "StockMaster"),
@@ -41,9 +67,34 @@ DB_CONFIG = {
 # Initialize connection pool
 connection_pool = pooling.MySQLConnectionPool(**DB_CONFIG)
 
+# =========================
+# PASSWORD HASHING (Argon2)
+# =========================
+ph = PasswordHasher()
+
+def hash_password(password: str) -> str:
+    return ph.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        return ph.verify(hashed_password, plain_password)
+    except VerifyMismatchError:
+        return False
+
+# =========================
+# JWT AUTH
+# =========================
 security = HTTPBearer()
 
-# FastAPI app
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+# =========================
+# FASTAPI INIT
+# =========================
 app = FastAPI(
     title="StockMaster Inventory Management System",
     version="1.0.2",
@@ -94,6 +145,8 @@ def get_db():
     try:
         yield conn
     finally:
+        # Return connection to pool
+        # Note: Ensure all cursors are closed and results consumed before this point
         conn.close()
 
 # ============================================
@@ -367,18 +420,8 @@ class LedgerEntry(BaseModel):
 # UTILITY FUNCTIONS
 # ============================================
 
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt"""
-    password_bytes = password.encode('utf-8')
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    password_bytes = plain_password.encode('utf-8')
-    hashed_bytes = hashed_password.encode('utf-8')
-    return bcrypt.checkpw(password_bytes, hashed_bytes)
+# Note: hash_password and verify_password are already defined above using Argon2
+# These duplicates are removed to prevent conflicts
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -416,9 +459,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 def login(user: UserLogin, conn = Depends(get_db)):
     """Login and generate JWT token"""
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM users WHERE email = %s", (user.email,))
-    db_user = cursor.fetchone()
-    cursor.close()
+    try:
+        cursor.execute("SELECT * FROM users WHERE email = %s", (user.email,))
+        db_user = cursor.fetchone()
+    finally:
+        cursor.close()
     
     if not db_user or not verify_password(user.password, db_user["password_hash"]):
         raise HTTPException(status_code=401, detail="Unauthorized request")
@@ -479,17 +524,20 @@ def reset_password(request: PasswordResetRequest, conn = Depends(get_db)):
     """Reset user password using token"""
     # In production, verify token from database
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id FROM users WHERE email = %s", (request.email,))
-    user = cursor.fetchone()
-    
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid token or email")
-    
-    # Update password
-    hashed_pw = hash_password(request.password)
-    cursor.execute("UPDATE users SET password_hash = %s WHERE email = %s", (hashed_pw, request.email))
-    conn.commit()
-    cursor.close()
+    try:
+        cursor.execute("SELECT id FROM users WHERE email = %s", (request.email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            cursor.close()
+            raise HTTPException(status_code=400, detail="Invalid token or email")
+        
+        # Update password
+        hashed_pw = hash_password(request.password)
+        cursor.execute("UPDATE users SET password_hash = %s WHERE email = %s", (hashed_pw, request.email))
+        conn.commit()
+    finally:
+        cursor.close()
     
     return {
         "success": True,
@@ -515,14 +563,16 @@ def list_product_categories(
     if search:
         query = "SELECT * FROM product_categories WHERE name LIKE %s LIMIT %s OFFSET %s"
         cursor.execute(query, (f"%{search}%", limit, offset))
+        categories = cursor.fetchall()
         count_query = "SELECT COUNT(*) as total FROM product_categories WHERE name LIKE %s"
         cursor.execute(count_query, (f"%{search}%",))
+        total = cursor.fetchone()["total"]
     else:
         cursor.execute("SELECT * FROM product_categories LIMIT %s OFFSET %s", (limit, offset))
+        categories = cursor.fetchall()
         cursor.execute("SELECT COUNT(*) as total FROM product_categories")
+        total = cursor.fetchone()["total"]
     
-    categories = cursor.fetchall()
-    total = cursor.fetchone()["total"]
     cursor.close()
     
     return {
@@ -543,6 +593,15 @@ def create_product_category(
     """Create new product category"""
     cursor = conn.cursor()
     try:
+        # Check if category name already exists before attempting insert
+        cursor.execute("SELECT id FROM product_categories WHERE name = %s", (category.name,))
+        if cursor.fetchone():
+            cursor.close()
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Category with name '{category.name}' already exists. Please use a different name."
+            )
+        
         cursor.execute(
             "INSERT INTO product_categories (name, description, is_active) VALUES (%s, %s, %s)",
             (category.name, category.description, category.is_active)
@@ -656,13 +715,17 @@ def list_products(
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
+    # Execute and fetch products first
     query = f"SELECT * FROM products{where_clause} LIMIT %s OFFSET %s"
-    params.extend([limit, offset])
-    cursor.execute(query, params)
+    query_params = params.copy()
+    query_params.extend([limit, offset])
+    cursor.execute(query, query_params)
     products = cursor.fetchall()
     
+    # Then execute and fetch count
     count_query = f"SELECT COUNT(*) as total FROM products{where_clause}"
-    cursor.execute(count_query, params[:-2] if conditions else [])
+    count_params = params.copy()
+    cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
     cursor.close()
     
@@ -823,13 +886,17 @@ def list_receipts(
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
+    # Execute and fetch receipts first
     query = f"SELECT * FROM receipts{where_clause} LIMIT %s OFFSET %s"
-    params.extend([limit, offset])
-    cursor.execute(query, params)
+    query_params = params.copy()
+    query_params.extend([limit, offset])
+    cursor.execute(query, query_params)
     receipts = cursor.fetchall()
     
+    # Then execute and fetch count
     count_query = f"SELECT COUNT(*) as total FROM receipts{where_clause}"
-    cursor.execute(count_query, params[:-2] if conditions else [])
+    count_params = params.copy()
+    cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
     cursor.close()
     
@@ -1029,13 +1096,17 @@ def list_deliveries(
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
+    # Execute and fetch deliveries first
     query = f"SELECT * FROM deliveries{where_clause} LIMIT %s OFFSET %s"
-    params.extend([limit, offset])
-    cursor.execute(query, params)
+    query_params = params.copy()
+    query_params.extend([limit, offset])
+    cursor.execute(query, query_params)
     deliveries = cursor.fetchall()
     
+    # Then execute and fetch count
     count_query = f"SELECT COUNT(*) as total FROM deliveries{where_clause}"
-    cursor.execute(count_query, params[:-2] if conditions else [])
+    count_params = params.copy()
+    cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
     cursor.close()
     
@@ -1199,13 +1270,17 @@ def list_transfers(
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
+    # Execute and fetch transfers first
     query = f"SELECT * FROM transfers{where_clause} LIMIT %s OFFSET %s"
-    params.extend([limit, offset])
-    cursor.execute(query, params)
+    query_params = params.copy()
+    query_params.extend([limit, offset])
+    cursor.execute(query, query_params)
     transfers = cursor.fetchall()
     
+    # Then execute and fetch count
     count_query = f"SELECT COUNT(*) as total FROM transfers{where_clause}"
-    cursor.execute(count_query, params[:-2] if conditions else [])
+    count_params = params.copy()
+    cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
     cursor.close()
     
@@ -1395,6 +1470,7 @@ def get_low_stock(
         where_clause = "WHERE ss.warehouse_id = %s"
         params.append(warehouse_id)
     
+    # Execute and fetch low stock first
     query = f"""
         SELECT p.*, ss.on_hand, ss.reserved
         FROM products p
@@ -1403,10 +1479,12 @@ def get_low_stock(
         HAVING ss.on_hand <= p.reorder_level
         LIMIT %s OFFSET %s
     """
-    params.extend([limit, offset])
-    cursor.execute(query, params)
+    query_params = params.copy()
+    query_params.extend([limit, offset])
+    cursor.execute(query, query_params)
     low_stock = cursor.fetchall()
     
+    # Then execute and fetch count
     count_query = f"""
         SELECT COUNT(*) as total
         FROM products p
@@ -1414,7 +1492,8 @@ def get_low_stock(
         {where_clause}
         HAVING ss.on_hand <= p.reorder_level
     """
-    cursor.execute(count_query, params[:-2] if warehouse_id else [])
+    count_params = params.copy()
+    cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
     cursor.close()
     
@@ -1458,13 +1537,17 @@ def get_ledger(
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
+    # Execute and fetch ledger first
     query = f"SELECT * FROM ledger{where_clause} ORDER BY movement_at DESC LIMIT %s OFFSET %s"
-    params.extend([limit, offset])
-    cursor.execute(query, params)
+    query_params = params.copy()
+    query_params.extend([limit, offset])
+    cursor.execute(query, query_params)
     ledger = cursor.fetchall()
     
+    # Then execute and fetch count
     count_query = f"SELECT COUNT(*) as total FROM ledger{where_clause}"
-    cursor.execute(count_query, params[:-2] if conditions else [])
+    count_params = params.copy()
+    cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
     cursor.close()
     
@@ -1492,9 +1575,11 @@ def list_warehouses(
     cursor = conn.cursor(dictionary=True)
     offset = (page - 1) * limit
     
+    # Execute and fetch warehouses first
     cursor.execute("SELECT * FROM warehouses LIMIT %s OFFSET %s", (limit, offset))
     warehouses = cursor.fetchall()
     
+    # Then execute and fetch count
     cursor.execute("SELECT COUNT(*) as total FROM warehouses")
     total = cursor.fetchone()["total"]
     cursor.close()
@@ -1614,20 +1699,26 @@ def list_warehouse_locations(
     offset = (page - 1) * limit
     
     if warehouse_id:
+        # Execute and fetch locations first
         cursor.execute(
             "SELECT * FROM warehouse_locations WHERE warehouse_id = %s LIMIT %s OFFSET %s",
             (warehouse_id, limit, offset)
         )
+        locations = cursor.fetchall()
+        # Then execute and fetch count
         cursor.execute(
             "SELECT COUNT(*) as total FROM warehouse_locations WHERE warehouse_id = %s",
             (warehouse_id,)
         )
+        total = cursor.fetchone()["total"]
     else:
+        # Execute and fetch locations first
         cursor.execute("SELECT * FROM warehouse_locations LIMIT %s OFFSET %s", (limit, offset))
+        locations = cursor.fetchall()
+        # Then execute and fetch count
         cursor.execute("SELECT COUNT(*) as total FROM warehouse_locations")
+        total = cursor.fetchone()["total"]
     
-    locations = cursor.fetchall()
-    total = cursor.fetchone()["total"]
     cursor.close()
     
     return {
@@ -1734,7 +1825,6 @@ def delete_warehouse_location(
 
 @app.get("/")
 def health_check():
-    """Health check endpoint"""
     return {"status": "ok", "message": "Warehouse Management System API"}
 
 if __name__ == "__main__":

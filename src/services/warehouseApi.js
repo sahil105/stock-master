@@ -1,33 +1,17 @@
 /**
  * Warehouse API Service
  * 
- * API Endpoint: GET /api/warehouses
- * API Endpoint: POST /api/warehouses
- * 
- * POST Request Payload:
- * {
- *   "name": "string",
- *   "code": "string",
- *   "address": "string"
- * }
- * 
- * POST Response Structure:
- * {
- *   "data": {
- *     "id": 1,
- *     "name": "Main Warehouse",
- *     "code": "Mumbai01",
- *     "address": "Plot 5, Industrial Area",
- *     "created_at": "2025-11-22T07:09:09.162Z"
- *   }
- * }
+ * API Endpoint: GET /api/v1/warehouses
+ * API Endpoint: POST /api/v1/warehouses
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+import { getAuthHeaders } from './auth';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 /**
  * Get all warehouses
- * @param {Object} params - Query parameters (page, limit, etc.)
+ * @param {Object} params - Query parameters (page, limit)
  * @returns {Promise<Object>} API response with warehouses list
  */
 export const getWarehouses = async (params = {}) => {
@@ -42,18 +26,17 @@ export const getWarehouses = async (params = {}) => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
+        ...getAuthHeaders(),
       },
     });
 
     const data = await response.json();
 
-    // Handle 401 Unauthorized
     if (response.status === 401) {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
         data: [],
       };
@@ -63,16 +46,15 @@ export const getWarehouses = async (params = {}) => {
       return {
         success: false,
         statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
         errors: data.errors || [],
         data: [],
       };
     }
 
-    // Handle paginated response structure
     return { 
       success: true, 
-      data: data.data || [], 
+      data: data.data || [],
       meta: data.meta || { total: 0, page: 1, limit: 25 }
     };
   } catch (error) {
@@ -90,7 +72,7 @@ export const getWarehouses = async (params = {}) => {
 
 /**
  * Create a new warehouse
- * @param {Object} payload - Warehouse data { name: string, code: string }
+ * @param {Object} payload - Warehouse data { name: string, code: string, address?: string }
  * @returns {Promise<Object>} API response
  */
 export const createWarehouse = async (payload) => {
@@ -99,36 +81,32 @@ export const createWarehouse = async (payload) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // TODO: Add authentication token if needed
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(payload),
     });
 
     const data = await response.json();
 
-    // Handle 401 Unauthorized
     if (response.status === 401) {
       return {
         success: false,
         statusCode: 401,
-        message: data.message || 'Unauthorized access. Please login again.',
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
         errors: [],
       };
     }
 
-    // Handle 422 Validation Error
     if (response.status === 422) {
       return {
         success: false,
         statusCode: 422,
-        message: data.message || 'Validation error',
+        message: data.detail || data.message || 'Validation error',
         errors: data.errors || [],
-        meta: data.meta,
       };
     }
 
-    // Handle 201 Created Success
-    if (response.status === 201 || response.ok) {
+    if (response.ok) {
       return {
         success: true,
         statusCode: response.status,
@@ -136,17 +114,12 @@ export const createWarehouse = async (payload) => {
       };
     }
 
-    // Handle other errors
-    if (!response.ok) {
-      return {
-        success: false,
-        statusCode: response.status,
-        message: data.message || `HTTP error! status: ${response.status}`,
-        errors: data.errors || [],
-      };
-    }
-
-    return { success: true, data: data.data || data };
+    return {
+      success: false,
+      statusCode: response.status,
+      message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      errors: data.errors || [],
+    };
   } catch (error) {
     console.error('Error creating warehouse:', error);
     return {
@@ -158,3 +131,160 @@ export const createWarehouse = async (payload) => {
   }
 };
 
+/**
+ * Get a single warehouse by ID
+ * @param {number} warehouseId - Warehouse ID
+ * @returns {Promise<Object>} API response with warehouse data
+ */
+export const getWarehouse = async (warehouseId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/warehouses/${warehouseId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+      };
+    }
+
+    if (response.status === 404) {
+      return {
+        success: false,
+        statusCode: 404,
+        message: data.detail || data.message || 'Warehouse not found',
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    return { success: true, data: data.data || data };
+  } catch (error) {
+    console.error('Error fetching warehouse:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+    };
+  }
+};
+
+/**
+ * Update a warehouse
+ * @param {number} warehouseId - Warehouse ID
+ * @param {Object} payload - Updated warehouse data
+ * @returns {Promise<Object>} API response
+ */
+export const updateWarehouse = async (warehouseId, payload) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/warehouses/${warehouseId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+      };
+    }
+
+    if (response.status === 422) {
+      return {
+        success: false,
+        statusCode: 422,
+        message: data.detail || data.message || 'Validation error',
+        errors: data.errors || [],
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+      };
+    }
+
+    return { success: true, data: data.data || data };
+  } catch (error) {
+    console.error('Error updating warehouse:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+    };
+  }
+};
+
+/**
+ * Delete a warehouse
+ * @param {number} warehouseId - Warehouse ID
+ * @returns {Promise<Object>} API response
+ */
+export const deleteWarehouse = async (warehouseId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/warehouses/${warehouseId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+
+    if (response.status === 204) {
+      return { success: true };
+    }
+
+    const data = await response.json();
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.detail || data.message || 'Unauthorized access. Please login again.',
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.detail || data.message || `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting warehouse:', error);
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+    };
+  }
+};

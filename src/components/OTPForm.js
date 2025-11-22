@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { sendOTP, verifyOTP } from '../services/api';
+import { requestOTP as sendOTP, verifyOTP } from '../services/authApi';
 import './OTPForm.css';
 
 const OTPForm = () => {
