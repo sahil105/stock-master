@@ -1,49 +1,139 @@
-.App {
+
+body {
+  margin: 0;
+  background: #f5f6fb;
+  color: #111827;
+  font-family: 'Inter', 'Space Grotesk', system-ui, sans-serif;
+}
+
+.auth-root {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  display: flex;
-  flex-direction: column;
-}
-
-.App-header {
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 2rem;
-  color: white;
-  text-align: center;
-  backdrop-filter: blur(10px);
-}
-
-.App-header h1 {
-  margin: 0 0 1rem 0;
-  font-size: 2.5rem;
-  font-weight: 700;
-}
-
-.api-status {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  display: inline-block;
-  margin-top: 0.5rem;
-}
-
-.api-status.checking {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.api-status.connected {
-  background-color: rgba(40, 167, 69, 0.8);
-}
-
-.api-status.disconnected {
-  background-color: rgba(220, 53, 69, 0.8);
-}
-
-.App-main {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 32px;
+  box-sizing: border-box;
+}
+
+.auth-card {
+  width: min(420px, 90vw);
+  padding: 36px;
+  border-radius: 28px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+}
+
+.auth-card form {
+  margin-bottom: 12px;
+}
+
+.auth-card form {
+  margin-bottom: 12px;
+}
+
+.layout-root {
+  min-height: 100vh;
+  background: #f5f6fb;
+}
+
+.top-nav {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.15);
+  z-index: 1100;
+  position: relative;
+}
+
+.nav-links button {
+  text-transform: none;
+  min-width: 0;
+  color: #1f2937;
+  font-size: 0.95rem;
+}
+
+.top-nav .MuiToolbar-root {
+  padding-left: 32px;
+  padding-right: 32px;
+  min-height: 64px;
+}
+
+.top-nav .logo-mark-text {
+  color: #ff8a2e;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+}
+
+.top-nav .nav-links button:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.top-nav .nav-links .MuiButton-contained {
+  background: linear-gradient(135deg, #ff8a2e, #ff4b2c);
+  color: #fff;
+}
+
+.top-nav .MuiButton-root {
+  transition: transform 0.2s ease, background 0.3s ease;
+  padding: 6px 18px;
+  border-radius: 999px;
+}
+
+.top-nav .MuiButton-root:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+}
+
+.main-panel {
+  padding: 24px 32px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #f5f6fb;
+  min-height: calc(100vh - 64px);
+}
+
+.top-nav .MuiButton-root:hover {
+  transform: translateY(-1px);
+}
+
+.kpi-card {
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+  border-left: 4px solid #f97316;
+}
+
+.dynamic-box {
+  padding: 24px;
+  border-radius: 24px;
+  background: #fff;
+}
+
+.operations-card,
+.timeline-card {
+  padding: 24px;
+  border-radius: 24px;
+  background: #fff;
+}
+
+.operation-item {
+  padding: 16px;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.timeline-step {
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #f4f6fb;
+}
+
+@media (max-width: 960px) {
+  .main-panel {
+    padding: 16px;
+  }
+  .nav-links {
+    display: none;
+  }
 }
