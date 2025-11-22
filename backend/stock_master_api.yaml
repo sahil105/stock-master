@@ -1,0 +1,1944 @@
+openapi: 3.0.3
+info:
+  title: StockMaster Inventory Management System
+  description: |
+    API Specification for Inventory Tracking, Stock Movements, Receipts, Deliveries, Transfers, and Adjustments.
+    Full requirements are available in the uploaded file.
+  version: 1.0.2
+  contact:
+    name: Product Team
+
+servers:
+  - url: /api/v1
+    description: Base server (relative)
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  headers:
+    X-Total-Count:
+      description: Total count of records (integer)
+      schema:
+        type: integer
+        example: 120
+    X-RateLimit-Limit:
+      description: Request limit per hour (integer)
+      schema:
+        type: integer
+        example: 1000
+    X-RateLimit-Remaining:
+      description: Remaining rate limit (integer)
+      schema:
+        type: integer
+        example: 750
+
+  schemas:
+    # ------------------
+    # Global wrapper
+    # ------------------
+    ApiResponse:
+      type: object
+      properties:
+        # success:
+        #   type: boolean
+        #   description: Indicates request success
+        #   example: true
+        # message:
+        #   type: string
+        #   description: Human readable message
+        #   example: "OK"
+        meta:
+          type: object
+          description: Metadata for list/paginated responses (optional)
+          properties:
+            total:
+              type: integer
+              example: 120
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 25
+
+    # ------------------
+    # Domain models
+    # ------------------
+    ProductCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: "Metals"
+        created_at:
+          type: string
+          format: date-time
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        name:
+          type: string
+          example: "Steel Rod"
+        sku:
+          type: string
+          example: "SR-001"
+        category_id:
+          type: integer
+          example: 2
+        uom:
+          type: string
+          example: "kg"
+        warehouse_id:
+          type: integer
+          example: 1
+        reorder_level:
+          type: integer
+          example: 20
+        created_at:
+          type: string
+          format: date-time
+
+    ProductStock:
+      type: object
+      properties:
+        total_product_in_stock: { type: integer, example: 101 }
+        low_stock_item_count: { type: integer, example: 5 }
+        pending_receipts_count: { type: integer, example: 20 }
+        pending_deliveries_count: { type: integer, example: 12 }
+        internal_transfer_schedule_count: { type: integer, example: 10 }
+
+    Receipt:
+      type: object
+      properties:
+        id: { type: integer, example: 101 }
+        vendor_name: { type: string, example: "ABC Steels" }
+        warehouse_id: { type: integer, example: 1 }
+        document_no: { type: string, example: "RCPT-2025-0001" }
+        contact: { type: string, example: "John Doe" }
+        status:
+          type: string
+          enum: [Draft, Waiting, Ready, Done, Canceled]
+        created_by: { type: integer, example: 5 }
+        created_at: { type: string, format: date-time }
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ReceiptItem:
+      type: object
+      properties:
+        id: { type: integer, example: 1001 }
+        receipt_id: { type: integer, example: 101 }
+        product_id: { type: integer, example: 10 }
+        qty: { type: number, example: 50 }
+
+    Delivery:
+      type: object
+      properties:
+        id: { type: integer, example: 201 }
+        customer_name: { type: string }
+        address: { type: string }
+        warehouse_id: { type: integer }
+        schedule_at: { type: string, format: date-time }
+        ref_no: { type: string }
+        remarks: { type: string }
+        operation_type:
+          type: string
+          enum: [Standard Delivery, Express Delivery, Bulk Delivery]
+        status: { type: string, enum: [Draft, Waiting, Ready, Done, Canceled] }
+        created_by: { type: integer, example: 7 }
+        created_at: { type: string, format: date-time }
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        items:
+          type: array
+          items:
+            type: object
+            required: [product_id, qty]
+            properties:
+              product_id: { type: integer }
+              qty: { type: number }
+
+    DeliveryItem:
+      type: object
+      properties:
+        id: { type: integer, example: 2001 }
+        delivery_id: { type: integer, example: 201 }
+        product_id: { type: integer, example: 10 }
+        qty: { type: number, example: 10 }
+
+    Transfer:
+      type: object
+      properties:
+        id: { type: integer, example: 301 }
+        warehouse_from: { type: integer }
+        warehouse_to: { type: integer }
+        ref_no: { type: string }
+        remarks: { type: string }
+        schedule_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [Draft, Waiting, Ready, Done, Canceled]
+        items:
+          type: array
+          items:
+            type: object
+            required: [product_id, qty]
+            properties:
+              product_id: { type: integer }
+              qty: { type: number }
+
+    TransferItem:
+      type: object
+      properties:
+        id: { type: integer, example: 3001 }
+        transfer_id: { type: integer, example: 301 }
+        product_id: { type: integer, example: 10 }
+        qty: { type: number, example: 20 }
+
+    Adjustment:
+      type: object
+      properties:
+        id: { type: integer, example: 401 }
+        warehouse_id: { type: integer, example: 1 }
+        product_id: { type: integer, example: 10 }
+        system_qty: { type: number, example: 100 }
+        counted_qty: { type: number, example: 96 }
+        difference: { type: number, example: -4 }
+        reason: { type: string, example: "Damaged" }
+        created_by: { type: integer, example: 5 }
+        created_at: { type: string, format: date-time }
+
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: integer, example: 5001 }
+        document_ref: { type: string, example: "ADJ-2025-0001" }
+        schedule_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        warehouse_from: { type: integer, nullable: true }
+        warehouse_to: { type: integer, nullable: true }
+        quantity: { type: number, example: 10 }
+        product_id: { type: integer, example: 10 }
+        status: { type: string, enum: [Draft, Waiting, Ready, Done, Canceled] }
+        movement_type:
+          type: string
+          enum: [receipt, delivery, transfer, adjustment]
+        created_by: { type: integer, example: 5 }
+
+    ErrorValidation:
+      type: object
+      properties:
+        field: { type: string }
+        message: { type: string }
+
+    # ------------------
+    # Typed response schemas (ApiResponse + typed data)
+    # ------------------
+    ProductCategoryResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ProductCategory"
+
+    ProductCategoryListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProductCategory"
+            meta:
+              type: object
+              properties:
+                total: { type: integer }
+                page: { type: integer }
+                limit: { type: integer }
+
+    ProductListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Product"
+            meta:
+              type: object
+              properties:
+                total: { type: integer }
+                page: { type: integer }
+                limit: { type: integer }
+
+    ProductResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Product"
+
+    ProductStockResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ProductStock"
+
+    ReceiptResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Receipt"
+
+    ReceiptCreateResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                id: { type: integer }
+
+    DeliveryResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Delivery"
+
+    DeliveryCreateResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                id: { type: integer }
+
+    TransferResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Transfer"
+
+    TransferCreateResponse:
+      allOf:
+        # - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                id: { type: integer }
+
+    AdjustmentResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Adjustment"
+
+    LedgerListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/LedgerEntry"
+            meta:
+              type: object
+              properties:
+                total: { type: integer }
+                page: { type: integer }
+                limit: { type: integer }
+    Warehouse:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        name: { type: string, example: "Main Warehouse" }
+        code: { type: string, example: "Mumbai01" }
+        address: { type: string, example: "Borivali" }
+        created_at: { type: string, format: date-time }
+
+    WarehouseResponse:
+      allOf:
+        # - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Warehouse"
+
+    WarehouseLocation:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        warehouse_id: { type: integer, example: 1 }
+        name: { type: string, example: "Aisle 1" }
+        code: { type: string, example: "A1" }
+        created_at: { type: string, format: date-time }
+
+    WarehouseLocationResponse:
+      allOf:
+        # - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/WarehouseLocation"
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            allOf:
+              # - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Unauthorized request"
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+
+    NotFound:
+      description: Not Found (Wrong URL, path value, or empty data)
+      content:
+        application/json:
+          schema:
+            allOf:
+              # - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  message: { type: string, example: "Resource not found" }
+
+    MethodNotAllowed:
+      description: Request method not allowed
+      content:
+        application/json:
+          schema:
+            allOf:
+              # - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  message: { type: string, example: "Method Not Allowed" }
+
+    ValidationFailed:
+      description: Validation Failed
+      content:
+        application/json:
+          schema:
+            allOf:
+              # - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  message: { type: string, example: "Validation error" }
+                  errors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ErrorValidation"
+
+    InternalError:
+      description: Internal Server Error (server exception)
+      content:
+        application/json:
+          schema:
+            allOf:
+              # - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  message: { type: string, example: "Something went wrong" }
+
+paths:
+  # --------------------
+  # AUTH
+  # --------------------
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and generate JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          token: { type: string }
+                          user:
+                            type: object
+                            properties:
+                              id: { type: integer }
+                              name: { type: string }
+                              email: { type: string }
+                              role: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh JWT token
+      responses:
+        "200":
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          token: { type: string }
+
+  /auth/password/forgot:
+    post:
+      tags: [Auth]
+      summary: Request password reset (send reset link/email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+      responses:
+        "200":
+          description: Password reset email sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  # - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      message:
+                        type: string
+                        example: "Password reset link sent to email"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      summary: Reset user password using token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, email, password]
+              properties:
+                token:
+                  type: string
+                  example: "reset_token_received_via_email"
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  format: password
+                  example: "NewPassword123!"
+      responses:
+        "200":
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      message:
+                        type: string
+                        example: "Password has been reset successfully"
+        "400":
+          description: Invalid token or email
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: false
+                      message:
+                        type: string
+                        example: "Invalid token or email"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # PRODUCT CATEGORIES (CRUD) - ADDED
+  # --------------------
+  /product-categories:
+    get:
+      tags: [ProductCategories]
+      summary: List product categories (supports search & pagination)
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+          description: Search by category name
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Product category list
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategoryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [ProductCategories]
+      summary: Create new product category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201":
+          description: Product category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategoryResponse"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /product-categories/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [ProductCategories]
+      summary: Get product category by id
+      responses:
+        "200":
+          description: Product category detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategoryResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [ProductCategories]
+      summary: Update product category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                is_active: { type: boolean }
+      responses:
+        "200":
+          description: Product category updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCategoryResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [ProductCategories]
+      summary: Delete product category (soft-delete recommended)
+      responses:
+        "204":
+          description: Product category deleted (no content)
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # PRODUCTS
+  # --------------------
+  /products:
+    get:
+      tags: [Products]
+      summary: List products (supports search & warehouse filter)
+      parameters:
+        - in: query
+          name: warehouse_id
+          schema: { type: integer }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Product list
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Products]
+      summary: Create new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                [name, sku, category_id, uom, warehouse_id, reorder_level]
+              properties:
+                name: { type: string }
+                sku: { type: string }
+                category_id: { type: integer }
+                uom: { type: string }
+                warehouse_id: { type: integer }
+                reorder_level: { type: integer }
+      responses:
+        "201":
+          description: Product created
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /products/{id}:
+    patch:
+      tags: [Products]
+      summary: Update product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                [name, sku, category_id, uom, warehouse_id, reorder_level]
+              properties:
+                name: { type: string }
+                sku: { type: string }
+                category_id: { type: integer }
+                uom: { type: string }
+                warehouse_id: { type: integer }
+                reorder_level: { type: integer }
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Products]
+      summary: Delete product category (soft-delete recommended)
+      responses:
+        "204":
+          description: Product category deleted (no content)
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /products_stock:
+    get:
+      tags: [Products]
+      summary: Get product stock per warehouse
+      responses:
+        "200":
+          description: Product stock summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductStockResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # RECEIPTS
+  # --------------------
+  /receipts:
+    post:
+      tags: [Receipts]
+      summary: Create receipt (Draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor_name, warehouse_id, items, ref_no, concat]
+              properties:
+                vendor_name: { type: string }
+                warehouse_id: { type: integer }
+                ref_no: { type: string }
+                concat: { type: string }
+                remarks: { type: string }
+                schedule_at: { type: string, format: date-time }
+                status:
+                  {
+                    type: string,
+                    enum: [Draft, Waiting, Ready, Done, Canceled],
+                  }
+
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, qty]
+                    properties:
+                      product_id: { type: integer }
+                      qty: { type: number }
+      responses:
+        "201":
+          description: Receipt created
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [Receipts]
+      summary: List all receipts (supports search, status filter & pagination)
+      parameters:
+        - in: query
+          name: warehouse_id
+          schema: { type: integer }
+          description: Filter by warehouse
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [Draft, Waiting, Ready, Done, Canceled]
+          description: Filter by receipt status
+        - in: query
+          name: search
+          schema: { type: string }
+          description: Search by vendor name or document number
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: List of receipts
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Receipt"
+                  meta:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      page: { type: integer }
+                      limit: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /receipts/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+
+    patch:
+      tags: [Receipts]
+      summary: Update a receipt (Draft/Waiting/Ready)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vendor_name: { type: string }
+                warehouse_id: { type: integer }
+                contact: { type: string }
+                status:
+                  type: string
+                  enum: [Draft, Waiting, Ready, Done, Canceled]
+                remarks: { type: string }
+                schedule_at: { type: string, format: date-time }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      product_id: { type: integer }
+                      qty: { type: number }
+      responses:
+        "200":
+          description: Receipt updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Receipts]
+      summary: Delete a receipt (soft-delete recommended)
+      responses:
+        "204":
+          description: Receipt deleted (no content)
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # DELIVERIES
+  # --------------------
+  /deliveries:
+    post:
+      tags: [Deliveries]
+      summary: Create delivery order (Draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                [
+                  customer_name,
+                  warehouse_id,
+                  items,
+                  ref_no,
+                  concat,
+                  address,
+                  operation_type,
+                  status,
+                ]
+              properties:
+                customer_name: { type: string }
+                address: { type: string }
+                warehouse_id: { type: integer }
+                schedule_at: { type: string, format: date-time }
+                ref_no: { type: string }
+                remarks: { type: string }
+                operation_type:
+                  type: string
+                  enum: [Standard Delivery, Express Delivery, Bulk Delivery]
+                status:
+                  {
+                    type: string,
+                    enum: [Draft, Waiting, Ready, Done, Canceled],
+                  }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, qty]
+                    properties:
+                      product_id: { type: integer }
+                      qty: { type: number }
+      responses:
+        "201":
+          description: Delivery created
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [Deliveries]
+      summary: List all deliveries (supports search, status filter & pagination)
+      parameters:
+        - in: query
+          name: warehouse_id
+          schema: { type: integer }
+          description: Filter by warehouse
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [Draft, Waiting, Ready, Done, Canceled]
+          description: Filter by delivery status
+        - in: query
+          name: search
+          schema: { type: string }
+          description: Search by customer name or document number
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: List of deliveries
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Delivery"
+                  meta:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      page: { type: integer }
+                      limit: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /deliveries/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [Deliveries]
+      summary: Get delivery by ID
+      description: Retrieve details of a specific delivery, including its items and status.
+      responses:
+        "200":
+          description: Delivery details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [Deliveries]
+      summary: Update a delivery (Draft/Waiting/Ready)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customer_name: { type: string }
+                address: { type: string }
+                warehouse_id: { type: integer }
+                schedule_at: { type: string, format: date-time }
+                ref_no: { type: string }
+                remarks: { type: string }
+                operation_type:
+                  type: string
+                  enum: [Standard Delivery, Express Delivery, Bulk Delivery]
+                status:
+                  {
+                    type: string,
+                    enum: [Draft, Waiting, Ready, Done, Canceled],
+                  }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, qty]
+                    properties:
+                      product_id: { type: integer }
+                      qty: { type: number }
+      responses:
+        "200":
+          description: Delivery updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # TRANSFERS
+  # --------------------
+  /transfers:
+    post:
+      tags: [Transfers]
+      summary: Create stock transfer (Draft)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [warehouse_from, warehouse_to, items]
+              properties:
+                warehouse_from: { type: integer }
+                warehouse_to: { type: integer }
+                ref_no: { type: string }
+                remarks: { type: string }
+                schedule_at: { type: string, format: date-time }
+                status:
+                  {
+                    type: string,
+                    enum: [Draft, In Transit, Completed, Canceled],
+                  }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, qty]
+                    properties:
+                      product_id: { type: integer }
+                      qty: { type: number }
+      responses:
+        "201":
+          description: Transfer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferCreateResponse"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [Transfers]
+      summary: List all stock transfers (supports search, status filter & pagination)
+      parameters:
+        - in: query
+          name: warehouse_from
+          schema: { type: integer }
+          description: Filter by source warehouse
+        - in: query
+          name: warehouse_to
+          schema: { type: integer }
+          description: Filter by destination warehouse
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [Draft, Waiting, Ready, Done, Canceled]
+          description: Filter by transfer status
+        - in: query
+          name: search
+          schema: { type: string }
+          description: Search by reference number
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: List of transfers
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Transfer"
+                  meta:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      page: { type: integer }
+                      limit: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /transfers/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [Transfers]
+      summary: Get transfer by ID
+      description: Retrieve details of a specific transfer, including its items and status.
+      responses:
+        "200":
+          description: Transfer details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [Transfers]
+      summary: Update a stock transfer (Draft/Waiting/Ready)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                warehouse_from: { type: integer }
+                warehouse_to: { type: integer }
+                ref_no: { type: string }
+                remarks: { type: string }
+                schedule_at: { type: string, format: date-time }
+                status:
+                  type: string
+                  enum: [Draft, Waiting, Ready, Done, Canceled]
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, qty]
+                    properties:
+                      product_id: { type: integer }
+                      qty: { type: number }
+      responses:
+        "200":
+          description: Transfer updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # ADJUSTMENTS
+  # --------------------
+  /adjustment:
+    post:
+      tags: [Adjustments]
+      summary: Create a stock adjustment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [warehouse_id, reason, items]
+              properties:
+                warehouse_id:
+                  type: integer
+                reason:
+                  type: string
+                status:
+                  type: string
+                  enum: [Draft, Completed, Canceled]
+                  default: Draft
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [product_id, quantity]
+                    properties:
+                      product_id:
+                        type: integer
+                      quantity:
+                        type: number
+                        format: decimal
+      responses:
+        "201":
+          description: Adjustment created
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [Adjustments]
+      summary: List all adjustments
+      parameters:
+        - in: query
+          name: warehouse_id
+          schema: { type: integer }
+          description: Filter adjustments by warehouse
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [Draft, Completed, Canceled]
+          description: Filter by adjustment status
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: List of adjustments
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        warehouse_id: { type: integer }
+                        reason: { type: string }
+                        status: { type: string }
+                        created_by: { type: integer }
+                        created_at: { type: string, format: date-time }
+                        completed_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              product_id: { type: integer }
+                              quantity: { type: number }
+                  meta:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      page: { type: integer }
+                      limit: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /adjustment/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Adjustments]
+      summary: Get adjustment by ID
+      responses:
+        "200":
+          description: Adjustment details retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      warehouse_id: { type: integer }
+                      reason: { type: string }
+                      status: { type: string }
+                      created_by: { type: integer }
+                      created_at: { type: string, format: date-time }
+                      completed_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            product_id: { type: integer }
+                            quantity: { type: number }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # REPORTS & LEDGER
+  # --------------------
+  /reports/stock-summary:
+    get:
+      tags: [Reports]
+      summary: Get stock summary across warehouses
+      responses:
+        "200":
+          description: Stock summary returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductStockResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /reports/low-stock:
+    get:
+      tags: [Reports]
+      summary: Low stock report (based on reorder levels)
+      parameters:
+        - in: query
+          name: warehouse_id
+          schema: { type: integer }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Low stock list
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ledger:
+    get:
+      tags: [Ledger]
+      summary: Stock movement ledger
+      parameters:
+        - in: query
+          name: product_id
+          schema: { type: integer }
+        - in: query
+          name: warehouse_id
+          schema: { type: integer }
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Ledger entries
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/X-Total-Count"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerListResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # WAREHOUSES
+  # --------------------
+  /warehouses:
+    get:
+      tags: [Warehouses]
+      summary: List all warehouses
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Warehouse list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Warehouse"
+                      meta:
+                        type: object
+                        properties:
+                          total: { type: integer }
+                          page: { type: integer }
+                          limit: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Warehouses]
+      summary: Create a new warehouse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name: { type: string, example: "Main Warehouse" }
+                code: { type: string, example: "Mumbai01" }
+                address: { type: string, example: "Borivali" }
+      responses:
+        "201":
+          description: Warehouse created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarehouseResponse"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /warehouses/{id}:
+    get:
+      tags: [Warehouses]
+      summary: Get warehouse details
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Warehouse details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarehouseResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [Warehouses]
+      summary: Update warehouse details
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                location: { type: string }
+                address: { type: string }
+      responses:
+        "200":
+          description: Warehouse updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarehouseResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Warehouses]
+      summary: Delete warehouse
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Warehouse deleted (no content)
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # --------------------
+  # WAREHOUSE LOCATIONS
+  # --------------------
+  /warehouse_locations:
+    get:
+      tags: [Warehouse Locations]
+      summary: List all warehouse locations (optionally filter by warehouse)
+      parameters:
+        - in: query
+          name: warehouse_id
+          schema: { type: integer }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Warehouse locations list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WarehouseLocation"
+                      meta:
+                        type: object
+                        properties:
+                          total: { type: integer }
+                          page: { type: integer }
+                          limit: { type: integer }
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Warehouse Locations]
+      summary: Create a new warehouse location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [warehouse_id, name, code]
+              properties:
+                warehouse_id: { type: integer, example: 1 }
+                name: { type: string, example: "Aisle 1" }
+                code: { type: string, example: "A1" }
+      responses:
+        "201":
+          description: Warehouse location created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarehouseLocationResponse"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /warehouse_locations/{id}:
+    get:
+      tags: [Warehouse Locations]
+      summary: Get warehouse location details
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Warehouse location details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarehouseLocationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [Warehouse Locations]
+      summary: Update warehouse location
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                warehouse_id: { type: integer, example: 1 }
+                name: { type: string }
+                code: { type: string }
+      responses:
+        "200":
+          description: Warehouse location updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarehouseLocationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Warehouse Locations]
+      summary: Delete warehouse location
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Warehouse location deleted (no content)
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
