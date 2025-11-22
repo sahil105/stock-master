@@ -20,7 +20,7 @@ import PaginationControls from '../components/PaginationControls';
 import { DataGrid } from '@mui/x-data-grid';
 import { createProduct, getProducts } from '../services/productApi';
 import { getCategories } from '../services/categoryApi';
-import { getWarehouses } from '../services/warehouseApi';
+import { getLocations } from '../services/locationApi';
 
 // Static products data - in real app this would come from API
 const initialProducts = [
@@ -37,8 +37,8 @@ function ProductsPage() {
   const [productsMeta, setProductsMeta] = useState({ total: 0, page: 1, limit: 25 });
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
-  const [warehouses, setWarehouses] = useState([]);
-  const [warehousesLoading, setWarehousesLoading] = useState(true);
+  const [locations, setLocations] = useState([]);
+  const [locationsLoading, setLocationsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [viewMode, setViewMode] = useState('list');
@@ -49,10 +49,10 @@ function ProductsPage() {
     severity: 'success', // 'success' | 'error' | 'warning' | 'info'
   });
 
-  // Fetch categories and warehouses on component mount
+  // Fetch categories and locations on component mount
   useEffect(() => {
     fetchCategories();
-    fetchWarehouses();
+    fetchLocations();
   }, []);
 
   useEffect(() => {
@@ -132,20 +132,20 @@ function ProductsPage() {
     }
   };
 
-  const fetchWarehouses = async () => {
-    setWarehousesLoading(true);
+  const fetchLocations = async () => {
+    setLocationsLoading(true);
     try {
-      const response = await getWarehouses();
+      const response = await getLocations({ limit: 100 }); // Get all locations
       if (response.success) {
-        setWarehouses(response.data || []);
+        setLocations(response.data || []);
       } else {
-        console.error('Error fetching warehouses:', response.message);
+        console.error('Error fetching locations:', response.message);
         // Keep empty array on error, will show in form
       }
     } catch (error) {
-      console.error('Error fetching warehouses:', error);
+      console.error('Error fetching locations:', error);
     } finally {
-      setWarehousesLoading(false);
+      setLocationsLoading(false);
     }
   };
 
@@ -470,8 +470,8 @@ function ProductsPage() {
         product={selectedProduct}
         onSave={handleSaveProduct}
         categories={categories}
-        warehouses={warehouses}
-        loading={categoriesLoading || warehousesLoading}
+        locations={locations}
+        loading={categoriesLoading || locationsLoading}
       />
       <Snackbar
         open={snackbar.open}

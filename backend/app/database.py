@@ -4,7 +4,10 @@ from typing import Generator
 from sqlalchemy import create_engine  # type: ignore[import]
 from sqlalchemy.orm import declarative_base, sessionmaker  # type: ignore[import]
 
-from .config import get_settings
+try:
+    from .config import get_settings
+except ImportError:
+    from config import get_settings
 
 settings = get_settings()
 Base = declarative_base()

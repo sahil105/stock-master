@@ -25,6 +25,18 @@ import string
 # bcrypt import removed - using Argon2 instead
 # import bcrypt
 
+# Import OTP and email services
+try:
+    # Try relative imports first (when used as a module)
+    from .otp_generator import generate_numeric_otp
+    from .email_service import send_otp_email
+    from .config import get_settings
+except ImportError:
+    # Fall back to absolute imports (when run directly)
+    from otp_generator import generate_numeric_otp
+    from email_service import send_otp_email
+    from config import get_settings
+
 load_dotenv()
 
 # =========================
@@ -420,7 +432,7 @@ class LedgerEntry(BaseModel):
     from_warehouse_id: Optional[int] = None  # Changed from warehouse_from
     to_warehouse_id: Optional[int] = None  # Changed from warehouse_to
     reference_id: Optional[int] = None  # Changed from document_ref (Schema uses reference_id as int)
-    created_at: datetime  # Changed from movement_at to created_at
+    movement_at: datetime  # Schema uses movement_at
 
 # ============================================
 # UTILITY FUNCTIONS
@@ -435,8 +447,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def generate_otp(length: int = 6) -> str:
-    return ''.join(random.choices(string.digits, k=length))
+# generate_otp removed - using generate_numeric_otp from otp_generator module instead
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), conn = Depends(get_db)):
     token = credentials.credentials
@@ -509,36 +520,69 @@ def refresh_token(current_user: dict = Depends(get_current_user)):
 
 @app.post("/api/v1/auth/password/forgot", tags=["Auth"])
 def forgot_password(request: PasswordForgotRequest, conn = Depends(get_db)):
-    """Request password reset (send reset link/email)"""
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id FROM users WHERE email = %s", (request.email,))
-    user = cursor.fetchone()
-    cursor.close()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Generate reset token (in production, store in DB and send via email)
-    reset_token = generate_otp(32)
-    print(f"Password reset token for {request.email}: {reset_token}")
-    
-    return {
-        "success": True,
-        "message": "Password reset link sent to email"
-    }
-
-@app.post("/api/v1/auth/password/reset", tags=["Auth"])
-def reset_password(request: PasswordResetRequest, conn = Depends(get_db)):
-    """Reset user password using token"""
-    # In production, verify token from database
+    """Request password reset (send OTP via email)"""
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("SELECT id FROM users WHERE email = %s", (request.email,))
         user = cursor.fetchone()
         
         if not user:
-            cursor.close()
-            raise HTTPException(status_code=400, detail="Invalid token or email")
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Generate 6-digit OTP
+        settings = get_settings()
+        otp_code = generate_numeric_otp(settings.OTP_LENGTH)
+        expires_at = datetime.now(UTC) + timedelta(minutes=settings.OTP_EXPIRY_MINUTES)
+        
+        # Delete any existing OTPs for this email
+        cursor.execute("DELETE FROM otps WHERE email = %s", (request.email,))
+        
+        # Store OTP in database
+        cursor.execute(
+            """INSERT INTO otps (email, otp, expires_at, created_at) 
+               VALUES (%s, %s, %s, NOW())""",
+            (request.email, otp_code, expires_at)
+        )
+        conn.commit()
+        
+        # Send OTP via email
+        try:
+            send_otp_email(request.email, otp_code, settings.OTP_EXPIRY_MINUTES)
+        except Exception as e:
+            # Log error but don't fail the request (OTP is still stored in DB)
+            print(f"Failed to send OTP email to {request.email}: {e}")
+            # In production, you might want to raise an error or use a background job
+        
+        return {
+            "success": True,
+            "message": "OTP has been sent to your email address"
+        }
+    finally:
+        cursor.close()
+
+@app.post("/api/v1/auth/password/reset", tags=["Auth"])
+def reset_password(request: PasswordResetRequest, conn = Depends(get_db)):
+    """Reset user password using OTP"""
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Verify user exists
+        cursor.execute("SELECT id FROM users WHERE email = %s", (request.email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            raise HTTPException(status_code=400, detail="Invalid OTP or email")
+        
+        # Verify OTP from database
+        cursor.execute(
+            """SELECT * FROM otps 
+               WHERE email = %s AND otp = %s AND expires_at > NOW() 
+               ORDER BY created_at DESC LIMIT 1""",
+            (request.email, request.token)
+        )
+        otp_record = cursor.fetchone()
+        
+        if not otp_record:
+            raise HTTPException(status_code=400, detail="Invalid or expired OTP. Please request a new one.")
         
         # Validate password: must contain lowercase, uppercase, special character, and be > 8 characters
         password_errors = []
@@ -552,12 +596,15 @@ def reset_password(request: PasswordResetRequest, conn = Depends(get_db)):
             password_errors.append("Password must contain at least one special character")
         
         if password_errors:
-            cursor.close()
             raise HTTPException(status_code=422, detail="; ".join(password_errors))
         
         # Update password
         hashed_pw = hash_password(request.password)
         cursor.execute("UPDATE users SET password_hash = %s WHERE email = %s", (hashed_pw, request.email))
+        
+        # Delete used OTP
+        cursor.execute("DELETE FROM otps WHERE email = %s AND otp = %s", (request.email, request.token))
+        
         conn.commit()
     finally:
         cursor.close()
@@ -793,17 +840,19 @@ def list_products(
     current_user: dict = Depends(get_current_user),
     conn = Depends(get_db)
 ):
-    """List products (Fix: Joins warehouse_locations to filter by warehouse_id)"""
+    """List products (Fix: Joins warehouse_locations to filter by warehouse_id and includes category_name)"""
     cursor = conn.cursor(dictionary=True)
     offset = (page - 1) * limit
     
     conditions = []
     params = []
     
-    # BASE QUERY: Join with warehouse_locations to allow filtering by warehouse_id
+    # BASE QUERY: Join with warehouse_locations and categories to get names
     base_query = """
         FROM products p
         LEFT JOIN warehouse_locations wl ON p.warehouse_location_id = wl.id
+        LEFT JOIN product_categories pc ON p.category_id = pc.id
+        LEFT JOIN warehouses w ON wl.warehouse_id = w.id
     """
     
     if warehouse_id:
@@ -817,8 +866,9 @@ def list_products(
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
-    # Execute and fetch products first
-    query = f"SELECT p.* {base_query} {where_clause} LIMIT %s OFFSET %s"
+    # Execute and fetch products with category and warehouse names
+    query = f"""SELECT p.*, pc.name as category_name, w.name as warehouse_name, wl.name as location_name 
+        {base_query} {where_clause} LIMIT %s OFFSET %s"""
     query_params = params.copy()
     query_params.extend([limit, offset])
     cursor.execute(query, query_params)
@@ -931,6 +981,7 @@ def get_product_stock(
 
     # 2. Fetch Data (Join Products, Stock Snapshot, and Warehouses)
     # We use COALESCE to handle cases where a product has no stock entry yet (returns 0)
+    # Note: Schema uses 'on_hand' column
     query = f"""
         SELECT 
             p.id as product_id,
@@ -1003,17 +1054,17 @@ def create_receipt(
     ref_no = receipt.ref_no or f"RCPT-{datetime.now().year}-{random.randint(1000, 9999)}"
     
     cursor.execute(
-        """INSERT INTO receipts (vendor_name, warehouse_id, ref_no, contact, remarks, schedule_at, status, created_by, created_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+        """INSERT INTO receipts (vendor_name, warehouse_id, document_no, contact, remarks, status, created_by, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())""",
         (receipt.vendor_name, receipt.warehouse_id, ref_no, receipt.contact,
-         receipt.remarks, receipt.schedule_at, receipt.status.value, current_user["id"])
+         receipt.remarks, receipt.status.value, current_user["id"])
     )
     receipt_id = cursor.lastrowid
     
     for item in receipt.items:
-        # Updated: Use quantity instead of qty
+        # Updated: Use qty (database column name)
         cursor.execute(
-            "INSERT INTO receipt_items (receipt_id, product_id, quantity) VALUES (%s, %s, %s)",
+            "INSERT INTO receipt_items (receipt_id, product_id, qty) VALUES (%s, %s, %s)",
             (receipt_id, item.product_id, item.quantity)
         )
     
@@ -1031,7 +1082,7 @@ def list_receipts(
     current_user: dict = Depends(get_current_user),
     conn = Depends(get_db)
 ):
-    """List all receipts (supports search, status filter & pagination)"""
+    """List all receipts (supports search, status filter & pagination) - includes warehouse_name"""
     cursor = conn.cursor(dictionary=True)
     offset = (page - 1) * limit
     
@@ -1039,34 +1090,38 @@ def list_receipts(
     params = []
     
     if warehouse_id:
-        conditions.append("warehouse_id = %s")
+        conditions.append("r.warehouse_id = %s")
         params.append(warehouse_id)
     
     if status:
-        conditions.append("status = %s")
+        conditions.append("r.status = %s")
         params.append(status.value)
     
     if search:
-        # Updated: Use ref_no instead of document_no
-        conditions.append("(vendor_name LIKE %s OR ref_no LIKE %s OR contact LIKE %s)")
+        # Updated: Use document_no (mapped to ref_no in API response)
+        conditions.append("(r.vendor_name LIKE %s OR r.document_no LIKE %s OR r.contact LIKE %s)")
         params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
-    # Execute and fetch receipts first
-    query = f"SELECT * FROM receipts{where_clause} ORDER BY created_at DESC LIMIT %s OFFSET %s"
+    # Execute and fetch receipts with warehouse name
+    query = f"""SELECT r.*, w.name as warehouse_name,
+        r.document_no as ref_no
+        FROM receipts r
+        LEFT JOIN warehouses w ON r.warehouse_id = w.id
+        {where_clause} ORDER BY r.created_at DESC LIMIT %s OFFSET %s"""
     query_params = params.copy()
     query_params.extend([limit, offset])
     cursor.execute(query, query_params)
     receipts = cursor.fetchall()
     
-    # Fetch items for each receipt
+    # Fetch items for each receipt (map qty to quantity for API)
     for receipt in receipts:
-        cursor.execute("SELECT product_id, quantity FROM receipt_items WHERE receipt_id = %s", (receipt["id"],))
+        cursor.execute("SELECT product_id, qty as quantity FROM receipt_items WHERE receipt_id = %s", (receipt["id"],))
         receipt["items"] = cursor.fetchall()
     
     # Then execute and fetch count
-    count_query = f"SELECT COUNT(*) as total FROM receipts{where_clause}"
+    count_query = f"SELECT COUNT(*) as total FROM receipts r{where_clause}"
     count_params = params.copy()
     cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
@@ -1119,14 +1174,14 @@ def update_receipt(
     if receipt.items:
         cursor.execute("DELETE FROM receipt_items WHERE receipt_id = %s", (id,))
         for item in receipt.items:
-            # Updated: Use quantity instead of qty
+            # Updated: Use qty (database column name)
             cursor.execute(
-                "INSERT INTO receipt_items (receipt_id, product_id, quantity) VALUES (%s, %s, %s)",
+                "INSERT INTO receipt_items (receipt_id, product_id, qty) VALUES (%s, %s, %s)",
                 (id, item.product_id, item.quantity)
             )
         conn.commit()
     
-    cursor.execute("SELECT * FROM receipts WHERE id = %s", (id,))
+    cursor.execute("SELECT r.*, r.document_no as ref_no FROM receipts r WHERE id = %s", (id,))
     updated = cursor.fetchone()
     cursor.close()
     
@@ -1169,25 +1224,25 @@ def validate_receipt(
     if receipt["status"] == "Done":
         raise HTTPException(status_code=422, detail="Receipt already validated")
     
-    # Get receipt items (Updated: Use quantity instead of qty)
-    cursor.execute("SELECT * FROM receipt_items WHERE receipt_id = %s", (id,))
+    # Get receipt items (map qty to quantity for processing)
+    cursor.execute("SELECT product_id, qty as quantity FROM receipt_items WHERE receipt_id = %s", (id,))
     items = cursor.fetchall()
     
     # Update stock and log movement
     for item in items:
-        # 1. Update Stock Snapshot (quantity) - Updated to use quantity
+        # 1. Update Stock Snapshot (on_hand) - Updated to use on_hand
         cursor.execute(
-            """INSERT INTO stock_snapshot (product_id, warehouse_id, quantity, last_updated)
+            """INSERT INTO stock_snapshot (product_id, warehouse_id, on_hand, last_updated)
                VALUES (%s, %s, %s, NOW())
-               ON DUPLICATE KEY UPDATE quantity = quantity + %s, last_updated = NOW()""",
+               ON DUPLICATE KEY UPDATE on_hand = on_hand + %s, last_updated = NOW()""",
             (item["product_id"], receipt["warehouse_id"], item["quantity"], item["quantity"])
         )
         
         # 2. Insert into Stock Moves (Schema Ledger) - Updated to use stock_moves table
         cursor.execute(
-            """INSERT INTO stock_moves (product_id, move_type, quantity, to_warehouse_id, reference_id, created_at)
-               VALUES (%s, 'receipt', %s, %s, %s, NOW())""",
-            (item["product_id"], item["quantity"], receipt["warehouse_id"], id)
+            """INSERT INTO stock_moves (product_id, move_type, quantity, to_warehouse_id, reference_id, movement_at, created_by)
+               VALUES (%s, 'receipt', %s, %s, %s, NOW(), %s)""",
+            (item["product_id"], item["quantity"], receipt["warehouse_id"], str(id), current_user["id"])
         )
     
     # Update receipt status
@@ -1198,7 +1253,7 @@ def validate_receipt(
     
     conn.commit()
     
-    cursor.execute("SELECT * FROM receipts WHERE id = %s", (id,))
+    cursor.execute("SELECT r.*, r.document_no as ref_no FROM receipts r WHERE id = %s", (id,))
     updated = cursor.fetchone()
     cursor.close()
     
@@ -1229,9 +1284,9 @@ def create_delivery(
     delivery_id = cursor.lastrowid
     
     for item in delivery.items:
-        # Updated: Use quantity instead of qty
+        # Updated: Use qty (database column name)
         cursor.execute(
-            "INSERT INTO delivery_items (delivery_id, product_id, quantity) VALUES (%s, %s, %s)",
+            "INSERT INTO delivery_items (delivery_id, product_id, qty) VALUES (%s, %s, %s)",
             (delivery_id, item.product_id, item.quantity)
         )
     
@@ -1249,7 +1304,7 @@ def list_deliveries(
     current_user: dict = Depends(get_current_user),
     conn = Depends(get_db)
 ):
-    """List all deliveries (supports search, status filter & pagination)"""
+    """List all deliveries (supports search, status filter & pagination) - includes warehouse_name"""
     cursor = conn.cursor(dictionary=True)
     offset = (page - 1) * limit
     
@@ -1257,28 +1312,36 @@ def list_deliveries(
     params = []
     
     if warehouse_id:
-        conditions.append("warehouse_id = %s")
+        conditions.append("d.warehouse_id = %s")
         params.append(warehouse_id)
     
     if status:
-        conditions.append("status = %s")
+        conditions.append("d.status = %s")
         params.append(status.value)
     
     if search:
-        conditions.append("(customer_name LIKE %s OR ref_no LIKE %s)")
+        conditions.append("(d.customer_name LIKE %s OR d.ref_no LIKE %s)")
         params.extend([f"%{search}%", f"%{search}%"])
     
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
-    # Execute and fetch deliveries first
-    query = f"SELECT * FROM deliveries{where_clause} LIMIT %s OFFSET %s"
+    # Execute and fetch deliveries with warehouse name
+    query = f"""SELECT d.*, w.name as warehouse_name 
+        FROM deliveries d
+        LEFT JOIN warehouses w ON d.warehouse_id = w.id
+        {where_clause} ORDER BY d.created_at DESC LIMIT %s OFFSET %s"""
     query_params = params.copy()
     query_params.extend([limit, offset])
     cursor.execute(query, query_params)
     deliveries = cursor.fetchall()
     
+    # Fetch items for each delivery (map qty to quantity for API)
+    for delivery in deliveries:
+        cursor.execute("SELECT product_id, qty as quantity FROM delivery_items WHERE delivery_id = %s", (delivery["id"],))
+        delivery["items"] = cursor.fetchall()
+    
     # Then execute and fetch count
-    count_query = f"SELECT COUNT(*) as total FROM deliveries{where_clause}"
+    count_query = f"SELECT COUNT(*) as total FROM deliveries d{where_clause}"
     count_params = params.copy()
     cursor.execute(count_query, count_params)
     total = cursor.fetchone()["total"]
@@ -1307,7 +1370,7 @@ def get_delivery(
     if not delivery:
         raise HTTPException(status_code=404, detail="Resource not found")
     
-    cursor.execute("SELECT * FROM delivery_items WHERE delivery_id = %s", (id,))
+    cursor.execute("SELECT product_id, qty as quantity FROM delivery_items WHERE delivery_id = %s", (id,))
     items = cursor.fetchall()
     delivery["items"] = items
     
@@ -1361,9 +1424,9 @@ def update_delivery(
     if delivery.items:
         cursor.execute("DELETE FROM delivery_items WHERE delivery_id = %s", (id,))
         for item in delivery.items:
-            # Updated: Use quantity instead of qty
+            # Updated: Use qty (database column name)
             cursor.execute(
-                "INSERT INTO delivery_items (delivery_id, product_id, quantity) VALUES (%s, %s, %s)",
+                "INSERT INTO delivery_items (delivery_id, product_id, qty) VALUES (%s, %s, %s)",
                 (id, item.product_id, item.quantity)
             )
         conn.commit()
@@ -1391,9 +1454,9 @@ def create_transfer(
     cursor = conn.cursor()
     document_no = f"TRF-{datetime.now().year}-{random.randint(1000, 9999)}"
     
-    # Using Schema column names: from_warehouse_id, to_warehouse_id
+    # Using Schema column names: warehouse_from, warehouse_to (mapped from API)
     cursor.execute(
-        """INSERT INTO transfers (from_warehouse_id, to_warehouse_id, ref_no, remarks, status, created_by, created_at)
+        """INSERT INTO transfers (warehouse_from, warehouse_to, ref_no, remarks, status, created_by, created_at)
            VALUES (%s, %s, %s, %s, %s, %s, NOW())""",
         (transfer.warehouse_from, transfer.warehouse_to, transfer.ref_no or document_no,
          transfer.remarks, transfer.status.value, current_user["id"])
@@ -1401,9 +1464,9 @@ def create_transfer(
     transfer_id = cursor.lastrowid
     
     for item in transfer.items:
-        # Updated: Use quantity instead of qty
+        # Updated: Use qty (database column name)
         cursor.execute(
-            "INSERT INTO transfer_items (transfer_id, product_id, quantity) VALUES (%s, %s, %s)",
+            "INSERT INTO transfer_items (transfer_id, product_id, qty) VALUES (%s, %s, %s)",
             (transfer_id, item.product_id, item.quantity)
         )
     
@@ -1429,13 +1492,13 @@ def list_transfers(
     conditions = []
     params = []
     
-    # Map API param to Schema column
+    # Map API param to Schema column (warehouse_from, warehouse_to)
     if warehouse_from:
-        conditions.append("from_warehouse_id = %s")
+        conditions.append("warehouse_from = %s")
         params.append(warehouse_from)
     
     if warehouse_to:
-        conditions.append("to_warehouse_id = %s")
+        conditions.append("warehouse_to = %s")
         params.append(warehouse_to)
     
     if status:
@@ -1485,7 +1548,7 @@ def get_transfer(
     if not transfer:
         raise HTTPException(status_code=404, detail="Resource not found")
     
-    cursor.execute("SELECT * FROM transfer_items WHERE transfer_id = %s", (id,))
+    cursor.execute("SELECT product_id, qty as quantity FROM transfer_items WHERE transfer_id = %s", (id,))
     items = cursor.fetchall()
     transfer["items"] = items
     
@@ -1505,12 +1568,12 @@ def update_transfer(
     updates = []
     values = []
     
-    # Map to Schema column names
+    # Map to Schema column names (warehouse_from, warehouse_to)
     if transfer.warehouse_from:
-        updates.append("from_warehouse_id = %s")
+        updates.append("warehouse_from = %s")
         values.append(transfer.warehouse_from)
     if transfer.warehouse_to:
-        updates.append("to_warehouse_id = %s")
+        updates.append("warehouse_to = %s")
         values.append(transfer.warehouse_to)
     if transfer.ref_no:
         updates.append("ref_no = %s")
@@ -1531,9 +1594,9 @@ def update_transfer(
     if transfer.items:
         cursor.execute("DELETE FROM transfer_items WHERE transfer_id = %s", (id,))
         for item in transfer.items:
-            # Updated: Use quantity instead of qty
+            # Updated: Use qty (database column name)
             cursor.execute(
-                "INSERT INTO transfer_items (transfer_id, product_id, quantity) VALUES (%s, %s, %s)",
+                "INSERT INTO transfer_items (transfer_id, product_id, qty) VALUES (%s, %s, %s)",
                 (id, item.product_id, item.quantity)
             )
         conn.commit()
@@ -1570,9 +1633,9 @@ def create_adjustment(
     
     # Insert adjustment items
     for item in adjustment.items:
-        # Get current system quantity
+        # Get current system quantity (map on_hand to quantity for processing)
         cursor.execute(
-            """SELECT quantity FROM stock_snapshot 
+            """SELECT on_hand as quantity FROM stock_snapshot 
                WHERE product_id = %s AND warehouse_id = %s""",
             (item.product_id, adjustment.warehouse_id)
         )
@@ -1589,20 +1652,20 @@ def create_adjustment(
             (adjustment_id, item.product_id, item.quantity)
         )
         
-        # Update stock snapshot (quantity) - Updated to use quantity
+        # Update stock snapshot (on_hand) - Updated to use on_hand
         new_quantity = system_qty + item.quantity
         cursor.execute(
-            """INSERT INTO stock_snapshot (product_id, warehouse_id, quantity, last_updated)
+            """INSERT INTO stock_snapshot (product_id, warehouse_id, on_hand, last_updated)
                VALUES (%s, %s, %s, NOW())
-               ON DUPLICATE KEY UPDATE quantity = %s, last_updated = NOW()""",
+               ON DUPLICATE KEY UPDATE on_hand = %s, last_updated = NOW()""",
             (item.product_id, adjustment.warehouse_id, new_quantity, new_quantity)
         )
         
         # Insert into Stock Moves (Schema Ledger) - Updated to use stock_moves
         cursor.execute(
-            """INSERT INTO stock_moves (product_id, move_type, quantity, to_warehouse_id, reference_id, created_at)
-               VALUES (%s, 'adjustment', %s, %s, %s, NOW())""",
-            (item.product_id, item.quantity, adjustment.warehouse_id, adjustment_id)
+            """INSERT INTO stock_moves (product_id, move_type, quantity, to_warehouse_id, reference_id, movement_at, created_by)
+               VALUES (%s, 'adjustment', %s, %s, %s, NOW(), %s)""",
+            (item.product_id, item.quantity, adjustment.warehouse_id, str(adjustment_id), current_user["id"])
         )
     
     conn.commit()
@@ -1611,7 +1674,7 @@ def create_adjustment(
     cursor.execute("SELECT * FROM adjustments WHERE id = %s", (adjustment_id,))
     result = cursor.fetchone()
     
-    # Fetch adjustment items
+    # Fetch adjustment items (quantity column exists in adjustment_items)
     cursor.execute("SELECT product_id, quantity FROM adjustment_items WHERE adjustment_id = %s", (adjustment_id,))
     items = cursor.fetchall()
     result["items"] = items
@@ -1658,7 +1721,7 @@ def list_adjustments(
     cursor.execute(query, query_params)
     adjustments = cursor.fetchall()
     
-    # Fetch items for each adjustment
+    # Fetch items for each adjustment (quantity column exists in adjustment_items)
     for adj in adjustments:
         cursor.execute("SELECT product_id, quantity FROM adjustment_items WHERE adjustment_id = %s", (adj["id"],))
         adj["items"] = cursor.fetchall()
@@ -1720,13 +1783,13 @@ def get_low_stock(
         where_clause = "WHERE ss.warehouse_id = %s"
         params.append(warehouse_id)
     
-    # Updated to use ss.quantity
+    # Updated to use ss.on_hand
     query = f"""
-        SELECT p.*, ss.quantity as on_hand
+        SELECT p.*, ss.on_hand
         FROM products p
         JOIN stock_snapshot ss ON p.id = ss.product_id
         {where_clause}
-        HAVING ss.quantity <= p.reorder_level
+        HAVING ss.on_hand <= p.reorder_level
         LIMIT %s OFFSET %s
     """
     query_params = params.copy()
@@ -1740,7 +1803,7 @@ def get_low_stock(
         FROM products p
         JOIN stock_snapshot ss ON p.id = ss.product_id
         {where_clause}
-        HAVING ss.quantity <= p.reorder_level
+        HAVING ss.on_hand <= p.reorder_level
     """
     count_params = params.copy()
     cursor.execute(count_query, count_params)
@@ -1789,7 +1852,7 @@ def get_ledger(
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     
     # Query stock_moves table (Updated to use stock_moves instead of ledger)
-    query = f"SELECT * FROM stock_moves{where_clause} ORDER BY created_at DESC LIMIT %s OFFSET %s"
+    query = f"SELECT * FROM stock_moves{where_clause} ORDER BY movement_at DESC LIMIT %s OFFSET %s"
     query_params = params.copy()
     query_params.extend([limit, offset])
     cursor.execute(query, query_params)
@@ -1822,12 +1885,15 @@ def list_warehouses(
     current_user: dict = Depends(get_current_user),
     conn = Depends(get_db)
 ):
-    """List all warehouses"""
+    """List all warehouses with created_at"""
     cursor = conn.cursor(dictionary=True)
     offset = (page - 1) * limit
     
-    # Execute and fetch warehouses first
-    cursor.execute("SELECT * FROM warehouses LIMIT %s OFFSET %s", (limit, offset))
+    # Execute and fetch warehouses first - explicitly include created_at
+    cursor.execute(
+        "SELECT id, name, code, address, created_at FROM warehouses ORDER BY created_at DESC LIMIT %s OFFSET %s",
+        (limit, offset)
+    )
     warehouses = cursor.fetchall()
     
     # Then execute and fetch count
@@ -1945,30 +2011,38 @@ def list_warehouse_locations(
     current_user: dict = Depends(get_current_user),
     conn = Depends(get_db)
 ):
-    """List all warehouse locations (optionally filter by warehouse)"""
+    """List all warehouse locations with warehouse name (optionally filter by warehouse)"""
     cursor = conn.cursor(dictionary=True)
     offset = (page - 1) * limit
     
+    # Join with warehouses table to get warehouse name
+    base_query = """
+        SELECT wl.*, w.name as warehouse_name, w.code as warehouse_code
+        FROM warehouse_locations wl
+        LEFT JOIN warehouses w ON wl.warehouse_id = w.id
+    """
+    
+    conditions = []
+    params = []
+    
     if warehouse_id:
-        # Execute and fetch locations first
-        cursor.execute(
-            "SELECT * FROM warehouse_locations WHERE warehouse_id = %s LIMIT %s OFFSET %s",
-            (warehouse_id, limit, offset)
-        )
-        locations = cursor.fetchall()
-        # Then execute and fetch count
-        cursor.execute(
-            "SELECT COUNT(*) as total FROM warehouse_locations WHERE warehouse_id = %s",
-            (warehouse_id,)
-        )
-        total = cursor.fetchone()["total"]
-    else:
-        # Execute and fetch locations first
-        cursor.execute("SELECT * FROM warehouse_locations LIMIT %s OFFSET %s", (limit, offset))
-        locations = cursor.fetchall()
-        # Then execute and fetch count
-        cursor.execute("SELECT COUNT(*) as total FROM warehouse_locations")
-        total = cursor.fetchone()["total"]
+        conditions.append("wl.warehouse_id = %s")
+        params.append(warehouse_id)
+    
+    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+    
+    # Execute and fetch locations first
+    query = f"{base_query}{where_clause} ORDER BY wl.created_at DESC LIMIT %s OFFSET %s"
+    query_params = params.copy()
+    query_params.extend([limit, offset])
+    cursor.execute(query, query_params)
+    locations = cursor.fetchall()
+    
+    # Then execute and fetch count
+    count_query = f"SELECT COUNT(*) as total FROM warehouse_locations wl{where_clause}"
+    count_params = params.copy()
+    cursor.execute(count_query, count_params)
+    total = cursor.fetchone()["total"]
     
     cursor.close()
     
@@ -1987,16 +2061,29 @@ def create_warehouse_location(
     current_user: dict = Depends(get_current_user),
     conn = Depends(get_db)
 ):
-    """Create a new warehouse location"""
+    """Create a new warehouse location with created_at"""
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO warehouse_locations (warehouse_id, name, code) VALUES (%s, %s, %s)",
+        "INSERT INTO warehouse_locations (warehouse_id, name, code, created_at) VALUES (%s, %s, %s, NOW())",
         (location.warehouse_id, location.name, location.code)
     )
     conn.commit()
     location_id = cursor.lastrowid
+    
+    # Fetch the created location with warehouse info
     cursor.close()
-    return {"data": {"id": location_id, "name": location.name}}
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT wl.*, w.name as warehouse_name, w.code as warehouse_code
+           FROM warehouse_locations wl
+           LEFT JOIN warehouses w ON wl.warehouse_id = w.id
+           WHERE wl.id = %s""",
+        (location_id,)
+    )
+    created_location = cursor.fetchone()
+    cursor.close()
+    
+    return {"data": created_location}
 
 @app.get("/api/v1/warehouse_locations/{id}", tags=["Warehouse Locations"])
 def get_warehouse_location(

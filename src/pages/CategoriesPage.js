@@ -86,8 +86,15 @@ function CategoriesPage() {
       flex: 1,
       valueGetter: (params) => {
         if (!params.row?.created_at) return 'N/A';
-        const date = new Date(params.row.created_at);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        try {
+          // Handle UTC date strings like "2025-11-22T08:28:02"
+          const dateStr = params.row.created_at;
+          const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'Z');
+          if (isNaN(date.getTime())) return 'N/A';
+          return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        } catch (e) {
+          return 'N/A';
+        }
       },
     },
   ];

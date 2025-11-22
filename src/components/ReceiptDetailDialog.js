@@ -27,13 +27,13 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
     vendor_name: receipt?.vendor_name || receipt?.from || '',
     warehouse_id: receipt?.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
     ref_no: receipt?.ref_no || '',
-    concat: receipt?.concat || receipt?.contact || '',
+    contact: receipt?.contact || receipt?.concat || '',
     remarks: receipt?.remarks || '',
     schedule_at: receipt?.schedule_at 
       ? new Date(receipt.schedule_at).toISOString().slice(0, 16)
       : new Date().toISOString().slice(0, 16),
     status: receipt?.status || 'Draft',
-    items: receipt?.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+    items: receipt?.items || [{ product_id: products.length > 0 ? products[0].id : '', quantity: 0 }],
   });
 
   // Update state when receipt prop changes
@@ -54,11 +54,11 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
         vendor_name: receipt.vendor_name || receipt.from || '',
         warehouse_id: receipt.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
         ref_no: receipt.ref_no || '',
-        concat: receipt.concat || receipt.contact || '',
+        contact: receipt.contact || receipt.concat || '',
         remarks: receipt.remarks || '',
         schedule_at: scheduleAt,
         status: receipt.status || 'Draft',
-        items: receipt.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+        items: receipt.items || [{ product_id: products.length > 0 ? products[0].id : '', quantity: 0 }],
       });
     }
   }, [receipt, warehouses, products]);
@@ -72,7 +72,7 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
   };
 
   const handleItemChange = (index, field) => (event) => {
-    const value = field === 'product_id' || field === 'qty' ? Number(event.target.value) : event.target.value;
+    const value = field === 'product_id' || field === 'quantity' ? Number(event.target.value) : event.target.value;
     const newItems = [...formValues.items];
     newItems[index] = { ...newItems[index], [field]: value };
     setFormValues((prev) => ({ ...prev, items: newItems }));
@@ -81,7 +81,7 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
   const handleAddItem = () => {
     setFormValues((prev) => ({
       ...prev,
-      items: [...prev.items, { product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+      items: [...prev.items, { product_id: products.length > 0 ? products[0].id : '', quantity: 0 }],
     }));
   };
 
@@ -97,9 +97,10 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
       return;
     }
 
-    // Validate items
-    const validItems = formValues.items.filter((item) => item.product_id && item.qty > 0);
+    // Validate items - ensure quantity > 0
+    const validItems = formValues.items.filter((item) => item.product_id && item.quantity > 0);
     if (validItems.length === 0) {
+      alert('Please add at least one item with quantity greater than 0.');
       return;
     }
 
@@ -112,13 +113,13 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
       vendor_name: formValues.vendor_name,
       warehouse_id: Number(formValues.warehouse_id),
       ref_no: formValues.ref_no || '',
-      concat: formValues.concat || '',
+      contact: formValues.contact || formValues.concat || '',
       remarks: formValues.remarks || '',
       schedule_at: scheduleAtISO,
       status: status || formValues.status || 'Draft',
       items: validItems.map((item) => ({
         product_id: Number(item.product_id),
-        qty: Number(item.qty),
+        quantity: Number(item.quantity),
       })),
     };
 
@@ -225,8 +226,8 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
             />
             <TextField
               label="Contact"
-              value={formValues.concat}
-              onChange={handleChange('concat')}
+              value={formValues.contact}
+              onChange={handleChange('contact')}
               fullWidth
               variant="outlined"
             />
@@ -304,13 +305,15 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
                       <TableCell align="right">
                         <TextField
                           type="number"
-                          value={item.qty || 0}
-                          onChange={handleItemChange(index, 'qty')}
+                          value={item.quantity || 0}
+                          onChange={handleItemChange(index, 'quantity')}
                           size="small"
                           variant="outlined"
                           required
-                          inputProps={{ min: 0, step: 1 }}
+                          inputProps={{ min: 0.01, step: 0.01 }}
                           sx={{ width: 120 }}
+                          error={item.quantity === 0 || item.quantity < 0}
+                          helperText={item.quantity === 0 || item.quantity < 0 ? 'Quantity must be greater than 0' : ''}
                         />
                       </TableCell>
                       <TableCell align="center">

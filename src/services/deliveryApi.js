@@ -35,11 +35,27 @@ export const createDelivery = async (payload) => {
     }
 
     if (response.status === 422) {
+      // FastAPI validation errors come in data.detail as array of objects
+      let errorMessages = [];
+      if (Array.isArray(data.detail)) {
+        errorMessages = data.detail.map((err) => {
+          const field = err.loc && err.loc.length > 1 ? err.loc[err.loc.length - 1] : 'field';
+          return `${field}: ${err.msg || 'Invalid value'}`;
+        });
+      } else if (typeof data.detail === 'string') {
+        errorMessages = [data.detail];
+      } else if (data.errors && Array.isArray(data.errors)) {
+        errorMessages = data.errors.map((err) => {
+          const field = err.field || 'field';
+          return `${field}: ${err.message || 'Invalid value'}`;
+        });
+      }
+      
       return {
         success: false,
         statusCode: 422,
-        message: data.detail || data.message || 'Validation error',
-        errors: data.errors || [],
+        message: errorMessages.length > 0 ? errorMessages.join(', ') : (data.detail || data.message || 'Validation error'),
+        errors: Array.isArray(data.detail) ? data.detail : (data.errors || []),
       };
     }
 

@@ -23,7 +23,6 @@ function LocationsPage() {
   const [locationsLoading, setLocationsLoading] = useState(true);
   const [locationsMeta, setLocationsMeta] = useState({ total: 0, page: 1, limit: 25 });
   const [warehouses, setWarehouses] = useState([]);
-  const [warehousesLoading, setWarehousesLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [snackbar, setSnackbar] = useState({
@@ -31,11 +30,6 @@ function LocationsPage() {
     message: '',
     severity: 'success',
   });
-
-  // Fetch warehouses on component mount
-  useEffect(() => {
-    fetchWarehouses();
-  }, []);
 
   // Fetch locations when pagination changes
   useEffect(() => {
@@ -47,15 +41,8 @@ function LocationsPage() {
     try {
       const response = await getLocations({ page: locationsMeta.page, limit: locationsMeta.limit });
       if (response.success) {
-        // Map locations to include warehouse name for display (if warehouses are loaded)
-        const locationsWithWarehouseNames = response.data.map((location) => {
-          const warehouse = warehouses.find((w) => w.id === location.warehouse_id);
-          return {
-            ...location,
-            warehouse_name: warehouse?.name || warehouse?.code || 'Unknown Warehouse',
-          };
-        });
-        setLocationsData(locationsWithWarehouseNames);
+        // Backend already returns warehouse_name in the response, so we can use it directly
+        setLocationsData(response.data || []);
         setLocationsMeta(response.meta || { total: 0, page: 1, limit: 25 });
       } else {
         if (response.statusCode === 401) {
@@ -86,37 +73,22 @@ function LocationsPage() {
     }
   };
 
-  const fetchWarehouses = async () => {
-    setWarehousesLoading(true);
-    try {
-      const response = await getWarehouses();
-      if (response.success) {
-        setWarehouses(response.data || []);
-      } else {
-        console.error('Error fetching warehouses:', response.message);
-      }
-    } catch (error) {
-      console.error('Error fetching warehouses:', error);
-    } finally {
-      setWarehousesLoading(false);
-    }
-  };
-
-  // Update location warehouse names when warehouses are loaded
+  // Fetch warehouses for the form dialog
   useEffect(() => {
-    if (warehouses.length > 0 && locationsData.length > 0) {
-      setLocationsData((prevLocations) => {
-        const locationsWithWarehouseNames = prevLocations.map((location) => {
-          const warehouse = warehouses.find((w) => w.id === location.warehouse_id);
-          return {
-            ...location,
-            warehouse_name: warehouse?.name || warehouse?.code || 'Unknown Warehouse',
-          };
-        });
-        return locationsWithWarehouseNames;
-      });
-    }
-  }, [warehouses.length]);
+    const fetchWarehouses = async () => {
+      try {
+        const response = await getWarehouses({ limit: 100 });
+        if (response.success) {
+          setWarehouses(response.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching warehouses:', error);
+      }
+    };
+    fetchWarehouses();
+  }, []);
+
+  // Note: Backend already returns warehouse_name in the response, so no need to map it
 
   // Handle save location from dialog
   const handleSaveLocation = async (apiPayload, formValues) => {
@@ -221,8 +193,15 @@ function LocationsPage() {
       flex: 1,
       valueGetter: (params) => {
         if (!params.row?.created_at) return 'N/A';
-        const date = new Date(params.row.created_at);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        try {
+          // Handle UTC date strings like "2025-11-22T08:28:02"
+          const dateStr = params.row.created_at;
+          const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'Z');
+          if (isNaN(date.getTime())) return 'N/A';
+          return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        } catch (e) {
+          return 'N/A';
+        }
       },
     },
   ];

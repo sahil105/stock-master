@@ -27,7 +27,6 @@ function DeliveryPage() {
   const [deliveriesMeta, setDeliveriesMeta] = useState({ total: 0, page: 1, limit: 25 });
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
-  const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState('list');
@@ -56,10 +55,18 @@ function DeliveryPage() {
         const mappedDeliveries = response.data.map((delivery) => ({
           id: delivery.id,
           reference: delivery.ref_no || `DEL-${delivery.id}`,
-          from: delivery.warehouse_name || `Warehouse ${delivery.warehouse_id}`,
+          from: delivery.warehouse_name || (delivery.warehouse_id ? `Warehouse ${delivery.warehouse_id}` : 'Warehouse'),
           to: delivery.customer_name || 'Customer',
           contact: delivery.remarks || 'N/A',
-          scheduleDate: delivery.created_at ? new Date(delivery.created_at).toLocaleDateString() : 'N/A',
+          scheduleDate: delivery.created_at ? (() => {
+            try {
+              const dateStr = delivery.created_at;
+              const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'Z');
+              return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
+            } catch (e) {
+              return 'N/A';
+            }
+          })() : 'N/A',
           status: delivery.status || 'Draft',
           ...delivery,
         }));
@@ -191,7 +198,10 @@ function DeliveryPage() {
             <IconButton 
               variant="contained" 
               color="primary"
-              onClick={() => setFormOpen(true)}
+              onClick={() => {
+                setSelected(null);
+                setDialogOpen(true);
+              }}
               sx={{ 
                 bgcolor: 'secondary.main',
                 color: 'white',
@@ -327,11 +337,20 @@ function DeliveryPage() {
             setSelected(null);
             fetchDeliveries();
           } else {
-            setSnackbar({
-              open: true,
-              message: response.message || 'Failed to create delivery.',
-              severity: 'error',
-            });
+            // Handle 422 Validation Error
+            if (response.statusCode === 422) {
+              setSnackbar({
+                open: true,
+                message: response.message || 'Validation error. Please check your input.',
+                severity: 'error',
+              });
+            } else {
+              setSnackbar({
+                open: true,
+                message: response.message || 'Failed to create delivery.',
+                severity: 'error',
+              });
+            }
           }
         }}
         warehouses={warehouses}

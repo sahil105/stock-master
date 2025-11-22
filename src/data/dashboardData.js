@@ -16,6 +16,7 @@ export const operationsSubmenu = [
 export const settingsSubmenu = [
   { label: 'Warehouse', path: '/warehouses' },
   { label: 'Location', path: '/locations' },
+  { label: 'Categories', path: '/settings' },
 ];
 
 export const kpis = [

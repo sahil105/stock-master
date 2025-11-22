@@ -14,13 +14,13 @@ import {
 } from '@mui/material';
 import { Close } from '@mui/icons-material';
 
-function ProductFormDialog({ open, onClose, product, onSave, categories = [], warehouses = [], loading = false }) {
+function ProductFormDialog({ open, onClose, product, onSave, categories = [], locations = [], loading = false }) {
   const [formValues, setFormValues] = useState({
     name: '',
     sku: '',
     category_id: categories.length > 0 ? categories[0].id : '',
     uom: '',
-    warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+    warehouse_location_id: locations.length > 0 ? locations[0].id : '',
     reorder_level: 0,
   });
 
@@ -32,7 +32,7 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
         sku: product.sku || '',
         category_id: product.category_id || (categories.length > 0 ? categories[0].id : ''),
         uom: product.uom || '',
-        warehouse_id: product.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
+        warehouse_location_id: product.warehouse_location_id || (locations.length > 0 ? locations[0].id : ''),
         reorder_level: product.reorder_level || 0,
       });
     } else {
@@ -42,26 +42,26 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
         sku: '',
         category_id: categories.length > 0 ? categories[0].id : '',
         uom: '',
-        warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+        warehouse_location_id: locations.length > 0 ? locations[0].id : '',
         reorder_level: 0,
       });
     }
-  }, [product, categories, warehouses]);
+  }, [product, categories, locations]);
 
-  // Update warehouse_id when warehouses are loaded
+  // Update warehouse_location_id when locations are loaded
   useEffect(() => {
-    if (!product && warehouses.length > 0) {
+    if (!product && locations.length > 0) {
       setFormValues((prev) => {
-        if (prev.warehouse_id === '' || !prev.warehouse_id) {
-          return { ...prev, warehouse_id: warehouses[0].id };
+        if (prev.warehouse_location_id === '' || !prev.warehouse_location_id) {
+          return { ...prev, warehouse_location_id: locations[0].id };
         }
         return prev;
       });
     }
-  }, [warehouses.length, product]);
+  }, [locations.length, product]);
 
   const handleChange = (field) => (event) => {
-    const value = field === 'category_id' || field === 'warehouse_id' || field === 'reorder_level'
+    const value = field === 'category_id' || field === 'warehouse_location_id' || field === 'reorder_level'
       ? Number(event.target.value) 
       : event.target.value;
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -69,17 +69,17 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    if (!formValues.name || !formValues.sku) {
+    if (!formValues.name || !formValues.sku || !formValues.category_id || !formValues.warehouse_location_id) {
       return;
     }
 
-    // Prepare API payload
+    // Prepare API payload - backend expects warehouse_location_id
     const apiPayload = {
       name: formValues.name,
       sku: formValues.sku,
       category_id: Number(formValues.category_id),
       uom: formValues.uom || 'unit',
-      warehouse_id: Number(formValues.warehouse_id),
+      warehouse_location_id: Number(formValues.warehouse_location_id),
       reorder_level: Number(formValues.reorder_level) || 0,
     };
 
@@ -94,7 +94,7 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
       sku: '',
       category_id: categories[0]?.id,
       uom: '',
-      warehouse_id: warehouses[0]?.id,
+      warehouse_location_id: locations[0]?.id,
       reorder_level: 0,
     });
     onClose();
@@ -156,19 +156,19 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
               variant="outlined"
             />
             <TextField
-              label="Warehouse"
+              label="Location"
               select
               required
-              value={formValues.warehouse_id}
-              onChange={handleChange('warehouse_id')}
+              value={formValues.warehouse_location_id}
+              onChange={handleChange('warehouse_location_id')}
               fullWidth
               variant="outlined"
-              disabled={warehouses.length === 0}
-              helperText={warehouses.length === 0 ? 'No warehouses available' : ''}
+              disabled={loading || locations.length === 0}
+              helperText={loading ? 'Loading locations...' : locations.length === 0 ? 'No locations available. Please create a location first.' : ''}
             >
-              {warehouses.map((warehouse) => (
-                <MenuItem key={warehouse.id} value={warehouse.id}>
-                  {warehouse.name || warehouse.code}
+              {locations.map((location) => (
+                <MenuItem key={location.id} value={location.id}>
+                  {location.name || location.code} {location.warehouse_name ? `(${location.warehouse_name})` : ''}
                 </MenuItem>
               ))}
             </TextField>

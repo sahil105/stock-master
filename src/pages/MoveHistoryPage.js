@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -10,13 +10,17 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import { Add, Refresh, Search, ViewList, ViewModule } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import MoveHistoryFormDialog from '../components/MoveHistoryFormDialog';
 import MoveHistoryDetailDialog from '../components/MoveHistoryDetailDialog';
-import { moveHistory } from '../data/dashboardData';
 import { DataGrid } from '@mui/x-data-grid';
+import { getLedger } from '../services/ledgerApi';
+import { getWarehouses } from '../services/warehouseApi';
+import { getProducts } from '../services/productApi';
 
 function MoveHistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,7 +28,148 @@ function MoveHistoryPage() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedMove, setSelectedMove] = useState(null);
   const [viewMode, setViewMode] = useState('list');
-  const [moves, setMoves] = useState(moveHistory);
+  const [moves, setMoves] = useState([]);
+  const [movesLoading, setMovesLoading] = useState(true);
+  const [movesMeta, setMovesMeta] = useState({ total: 0, page: 1, limit: 25 });
+  const [warehouses, setWarehouses] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
+
+  // Fetch warehouses and products on mount
+  useEffect(() => {
+    fetchWarehouses();
+    fetchProducts();
+  }, []);
+
+  // Fetch ledger when page/limit changes or when warehouses/products are loaded
+  useEffect(() => {
+    if (warehouses.length > 0 || products.length > 0) {
+      fetchLedger();
+    }
+  }, [movesMeta.page, movesMeta.limit, warehouses.length, products.length]);
+
+  const fetchLedger = async () => {
+    setMovesLoading(true);
+    try {
+      const response = await getLedger({
+        page: movesMeta.page,
+        limit: movesMeta.limit,
+      });
+      if (response.success) {
+        // Map API data to match component expectations
+        const mappedMoves = mapLedgerToMoves(response.data);
+        setMoves(mappedMoves);
+        setMovesMeta(response.meta || { total: 0, page: 1, limit: 25 });
+      } else {
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+        } else {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Failed to load move history.',
+            severity: 'error',
+          });
+        }
+        setMoves([]);
+      }
+    } catch (error) {
+      console.error('Error fetching ledger:', error);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while loading move history.',
+        severity: 'error',
+      });
+      setMoves([]);
+    } finally {
+      setMovesLoading(false);
+    }
+  };
+
+  const fetchWarehouses = async () => {
+    try {
+      const response = await getWarehouses({ limit: 100 });
+      if (response.success) {
+        setWarehouses(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching warehouses:', error);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const response = await getProducts({ limit: 100 });
+      if (response.success) {
+        setProducts(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
+  };
+
+  const mapLedgerToMoves = (ledgerEntries) => {
+    return ledgerEntries.map((entry) => {
+      const product = products.find(p => p.id === entry.product_id);
+      const fromWarehouse = entry.from_warehouse_id 
+        ? warehouses.find(w => w.id === entry.from_warehouse_id)
+        : null;
+      const toWarehouse = entry.to_warehouse_id
+        ? warehouses.find(w => w.id === entry.to_warehouse_id)
+        : null;
+
+      // Determine reference based on move_type
+      let reference = '';
+      if (entry.move_type === 'receipt') {
+        reference = `WH/IN/${String(entry.reference_id || entry.id).padStart(4, '0')}`;
+      } else if (entry.move_type === 'delivery') {
+        reference = `WH/OUT/${String(entry.reference_id || entry.id).padStart(4, '0')}`;
+      } else if (entry.move_type === 'transfer') {
+        reference = `WH/TRF/${String(entry.reference_id || entry.id).padStart(4, '0')}`;
+      } else if (entry.move_type === 'adjustment') {
+        reference = `WH/ADJ/${String(entry.reference_id || entry.id).padStart(4, '0')}`;
+      } else {
+        reference = `WH/${entry.move_type?.toUpperCase()}/${String(entry.id).padStart(4, '0')}`;
+      }
+
+      // Format date
+      let dateStr = 'N/A';
+      if (entry.movement_at) {
+        try {
+          const date = new Date(entry.movement_at);
+          dateStr = date.toLocaleDateString('en-US', { 
+            month: '2-digit', 
+            day: '2-digit', 
+            year: 'numeric' 
+          });
+        } catch (e) {
+          dateStr = entry.movement_at;
+        }
+      }
+
+      return {
+        id: entry.id,
+        reference: reference,
+        date: dateStr,
+        contact: product?.name || `Product ${entry.product_id}`,
+        from: fromWarehouse?.name || (entry.from_warehouse_id ? `Warehouse ${entry.from_warehouse_id}` : 'N/A'),
+        to: toWarehouse?.name || (entry.to_warehouse_id ? `Warehouse ${entry.to_warehouse_id}` : 'N/A'),
+        quantity: entry.quantity ? `${entry.quantity} ${product?.uom || 'units'}` : '',
+        status: 'Done', // Ledger entries are always completed
+        move_type: entry.move_type,
+        product_id: entry.product_id,
+        product_name: product?.name,
+        ...entry, // Include all original entry data
+      };
+    });
+  };
 
   // Filter move history based on search query (reference, contact, from, to)
   const filteredMoveHistory = useMemo(() => {
@@ -149,7 +294,10 @@ function MoveHistoryPage() {
             </ToggleButtonGroup>
             <IconButton 
               variant="outlined" 
-              onClick={() => setMoves(moveHistory)}
+              onClick={() => {
+                setSearchQuery('');
+                fetchLedger();
+              }}
               sx={{ 
                 border: '1px solid rgba(0, 0, 0, 0.23)',
                 '&:hover': {
@@ -186,7 +334,7 @@ function MoveHistoryPage() {
           </Typography>
           {viewMode === 'list' ? (
             <Box sx={{ height: 400 }}>
-              {filteredMoveHistory.length === 0 ? (
+              {!movesLoading && filteredMoveHistory.length === 0 ? (
                 <Box
                   sx={{
                     height: '100%',
@@ -213,6 +361,7 @@ function MoveHistoryPage() {
                   columns={columns}
                   hideFooter
                   density="compact"
+                  loading={movesLoading}
                   onRowClick={handleRowClick}
                   getRowClassName={(params) => {
                     const moveType = getMoveType(params.row.reference);
@@ -244,7 +393,7 @@ function MoveHistoryPage() {
             </Box>
           ) : (
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 320 }}>
-              {filteredMoveHistory.length === 0 ? (
+              {!movesLoading && filteredMoveHistory.length === 0 ? (
                 <Box
                   sx={{
                     width: '100%',
@@ -339,6 +488,16 @@ function MoveHistoryPage() {
           move={selectedMove}
           onSave={handleSaveMoveDetail}
         />
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </Stack>
     </MainLayout>
   );

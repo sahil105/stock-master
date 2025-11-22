@@ -5,7 +5,7 @@
 
 import { getAuthHeaders } from './auth';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 /**
  * Create a new adjustment
@@ -81,15 +81,11 @@ export const createAdjustment = async (payload) => {
 export const getAdjustments = async (params = {}) => {
   try {
     const queryParams = new URLSearchParams();
-    if (params.page && params.limit) {
-      const skip = (params.page - 1) * params.limit;
-      queryParams.append('skip', skip);
-      queryParams.append('limit', params.limit);
-    } else if (params.limit) {
-      queryParams.append('limit', params.limit);
-    } else {
-      queryParams.append('limit', params.limit || 100);
-    }
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.warehouse_id) queryParams.append('warehouse_id', params.warehouse_id);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.search) queryParams.append('search', params.search);
     
     const url = `${API_BASE_URL}/adjustments${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     
@@ -124,18 +120,11 @@ export const getAdjustments = async (params = {}) => {
       };
     }
 
-    // Backend returns direct array, not wrapped in data/meta
-    const adjustmentsArray = Array.isArray(data) ? data : (data.data || []);
-    const total = adjustmentsArray.length;
-    
+    // Backend returns { data: [...], meta: {...} }
     return { 
       success: true, 
-      data: adjustmentsArray,
-      meta: {
-        total: total,
-        page: params.page || 1,
-        limit: params.limit || 100
-      }
+      data: data.data || [],
+      meta: data.meta || { total: 0, page: params.page || 1, limit: params.limit || 25 }
     };
   } catch (error) {
     console.error('Error fetching adjustments:', error);
@@ -145,7 +134,7 @@ export const getAdjustments = async (params = {}) => {
       message: error.message || 'Network error. Please check your connection.',
       errors: [],
       data: [],
-      meta: { total: 0, page: 1, limit: 100 },
+      meta: { total: 0, page: 1, limit: 25 },
     };
   }
 };

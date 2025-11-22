@@ -102,9 +102,17 @@ function ReceiptsPage() {
           id: receipt.id,
           reference: receipt.ref_no || `REC-${receipt.id}`,
           from: receipt.vendor_name || 'Vendor',
-          to: receipt.warehouse_id ? `Warehouse ${receipt.warehouse_id}` : 'Warehouse',
+          to: receipt.warehouse_name || (receipt.warehouse_id ? `Warehouse ${receipt.warehouse_id}` : 'Warehouse'),
           contact: receipt.contact || 'N/A',
-          scheduleDate: receipt.created_at ? new Date(receipt.created_at).toLocaleDateString() : 'N/A',
+          scheduleDate: receipt.created_at ? (() => {
+            try {
+              const dateStr = receipt.created_at;
+              const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'Z');
+              return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
+            } catch (e) {
+              return 'N/A';
+            }
+          })() : 'N/A',
           status: receipt.status || 'Draft',
         }));
         setReceiptsData(mappedReceipts);
@@ -198,15 +206,11 @@ function ReceiptsPage() {
         }
 
         // Handle 422 Validation Error
-        if (response.statusCode === 422 && response.errors && response.errors.length > 0) {
-          const errorMessages = response.errors.map((err) => {
-            const field = err.field || 'field';
-            return `${field}: ${err.message}`;
-          }).join(', ');
-
+        if (response.statusCode === 422) {
+          // Error message is already formatted in the API service
           setSnackbar({
             open: true,
-            message: `Validation error: ${errorMessages}`,
+            message: response.message || 'Validation error. Please check your input.',
             severity: 'error',
           });
           // Keep dialog open to allow user to fix errors

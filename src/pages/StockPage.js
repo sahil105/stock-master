@@ -35,20 +35,42 @@ function StockPage() {
     try {
       const response = await getStock();
       if (response.success) {
-        // Map API data to match component expectations
-        // Backend returns: { data: [{ id, name, sku, on_hand, reserved, free_to_use, ... }] }
-        const mappedStock = response.data.map((item) => ({
-          id: item.id,
-          product: item.name || 'Unknown Product',
-          perUnitCost: 0, // Cost not available in stock endpoint
-          onHand: item.on_hand || 0,
-          freeToUse: item.free_to_use || (item.on_hand - (item.reserved || 0)) || 0,
-          warehouse: item.warehouse_name || `Warehouse ${item.warehouse_id}`,
-          sku: item.sku || 'N/A',
-          reserved: item.reserved || 0,
-          ...item,
-        }));
-        setRows(mappedStock);
+        // Backend returns grouped data: { data: [{ product_id, product_name, sku, stock_by_warehouse: [...] }] }
+        // We need to flatten it to show one row per product-warehouse combination
+        const flattenedStock = [];
+        response.data.forEach((product) => {
+          if (product.stock_by_warehouse && product.stock_by_warehouse.length > 0) {
+            product.stock_by_warehouse.forEach((warehouseStock) => {
+              flattenedStock.push({
+                id: `${product.product_id}_${warehouseStock.warehouse_id}`, // Unique ID for each product-warehouse combo
+                product: product.product_name || 'Unknown Product',
+                perUnitCost: 0, // Cost not available in stock endpoint
+                onHand: warehouseStock.on_hand || 0,
+                freeToUse: warehouseStock.free_to_use || (warehouseStock.on_hand - (warehouseStock.reserved || 0)) || 0,
+                warehouse: warehouseStock.warehouse_name || `Warehouse ${warehouseStock.warehouse_id}`,
+                sku: product.sku || 'N/A',
+                reserved: warehouseStock.reserved || 0,
+                product_id: product.product_id,
+                warehouse_id: warehouseStock.warehouse_id,
+              });
+            });
+          } else {
+            // Product with no stock entries
+            flattenedStock.push({
+              id: `${product.product_id}_0`,
+              product: product.product_name || 'Unknown Product',
+              perUnitCost: 0,
+              onHand: 0,
+              freeToUse: 0,
+              warehouse: 'N/A',
+              sku: product.sku || 'N/A',
+              reserved: 0,
+              product_id: product.product_id,
+              warehouse_id: null,
+            });
+          }
+        });
+        setRows(flattenedStock);
       } else {
         if (response.statusCode === 401) {
           setSnackbar({

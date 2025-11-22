@@ -313,47 +313,24 @@ export const requestOTP = async (payload) => {
 
 /**
  * Verify OTP for password reset
- * Note: Backend uses token-based reset, not OTP. This function treats OTP as token.
- * The ResetPasswordPage flow expects OTP verification, but backend needs:
- * POST /api/v1/auth/password/reset with { token, email, password }
- * 
- * Since ResetPasswordPage doesn't collect password during OTP verification,
- * this function just verifies (accepts any non-empty OTP for now).
- * In production, update ResetPasswordPage to collect new password and use resetPassword.
- * 
+ * Note: This is now handled by resetPassword which verifies OTP when resetting password
  * @param {Object} payload - { email, otp }
  * @returns {Promise<Object>} API response
+ * @deprecated Use resetPassword instead - OTP verification happens during password reset
  */
 export const verifyOTP = async (payload) => {
-  try {
-    // TODO: Backend doesn't have OTP verification endpoint
-    // The backend uses token-based reset: POST /api/v1/auth/password/reset
-    // with { token, email, password }
-    // 
-    // For now, accept the OTP verification (treating it as token verification)
-    // The actual password reset will need to happen in a separate step
-    if (!payload.otp || payload.otp.length === 0) {
-      return {
-        success: false,
-        statusCode: 400,
-        message: 'OTP is required',
-      };
-    }
-
-    // In a real implementation with OTP backend, this would verify the OTP
-    // For now, we'll just return success if OTP is provided
-    // Note: This doesn't actually reset the password - ResetPasswordPage needs updating
-    return {
-      success: true,
-      message: 'OTP verified successfully. Note: Password reset requires a separate step.',
-    };
-  } catch (error) {
-    console.error('Error verifying OTP:', error);
+  // This function is kept for backward compatibility
+  // OTP verification now happens in resetPassword endpoint
+  if (!payload.otp || payload.otp.length === 0) {
     return {
       success: false,
-      statusCode: 0,
-      message: error.message || 'Network error. Please check your connection.',
+      statusCode: 400,
+      message: 'OTP is required',
     };
   }
+  return {
+    success: true,
+    message: 'OTP format is valid. Please proceed to reset password.',
+  };
 };
 

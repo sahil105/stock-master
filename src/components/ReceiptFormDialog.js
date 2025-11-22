@@ -25,7 +25,7 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
     vendor_name: '',
     warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
     ref_no: '',
-    concat: '',
+    contact: '',
     remarks: '',
     schedule_at: new Date().toISOString().slice(0, 16), // Format: YYYY-MM-DDTHH:mm
     status: 'Draft',
@@ -48,11 +48,11 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
         vendor_name: receipt.vendor_name || '',
         warehouse_id: receipt.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
         ref_no: receipt.ref_no || '',
-        concat: receipt.concat || '',
+        contact: receipt.contact || receipt.concat || '',
         remarks: receipt.remarks || '',
         schedule_at: scheduleAt,
         status: receipt.status || 'Draft',
-        items: receipt.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+        items: receipt.items || [{ product_id: products.length > 0 ? products[0].id : '', quantity: 0 }],
       });
     } else {
       // Reset form for new receipt
@@ -60,11 +60,11 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
         vendor_name: '',
         warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
         ref_no: '',
-        concat: '',
+        contact: '',
         remarks: '',
         schedule_at: new Date().toISOString().slice(0, 16),
         status: 'Draft',
-        items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+        items: [{ product_id: products.length > 0 ? products[0].id : '', quantity: 0 }],
       });
     }
   }, [receipt, warehouses, products]);
@@ -84,7 +84,7 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
         if (prev.items.length > 0 && (prev.items[0].product_id === '' || !prev.items[0].product_id)) {
           return {
             ...prev,
-            items: [{ product_id: products[0].id, qty: 0 }],
+            items: [{ product_id: products[0].id, quantity: 0 }],
           };
         }
         return prev;
@@ -98,7 +98,7 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
   };
 
   const handleItemChange = (index, field) => (event) => {
-    const value = field === 'product_id' || field === 'qty' ? Number(event.target.value) : event.target.value;
+    const value = field === 'product_id' || field === 'quantity' ? Number(event.target.value) : event.target.value;
     const newItems = [...formValues.items];
     newItems[index] = { ...newItems[index], [field]: value };
     setFormValues((prev) => ({ ...prev, items: newItems }));
@@ -107,7 +107,7 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
   const handleAddItem = () => {
     setFormValues((prev) => ({
       ...prev,
-      items: [...prev.items, { product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+      items: [...prev.items, { product_id: products.length > 0 ? products[0].id : '', quantity: 0 }],
     }));
   };
 
@@ -124,9 +124,10 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
       return;
     }
 
-    // Validate items
-    const validItems = formValues.items.filter((item) => item.product_id && item.qty > 0);
+    // Validate items - ensure quantity > 0
+    const validItems = formValues.items.filter((item) => item.product_id && item.quantity > 0);
     if (validItems.length === 0) {
+      alert('Please add at least one item with quantity greater than 0.');
       return;
     }
 
@@ -139,13 +140,13 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
       vendor_name: formValues.vendor_name,
       warehouse_id: Number(formValues.warehouse_id),
       ref_no: formValues.ref_no || '',
-      concat: formValues.concat || '',
+      contact: formValues.contact || '',
       remarks: formValues.remarks || '',
       schedule_at: scheduleAtISO,
       status: formValues.status || 'Draft',
       items: validItems.map((item) => ({
         product_id: Number(item.product_id),
-        qty: Number(item.qty),
+        quantity: Number(item.quantity),
       })),
     };
 
@@ -159,11 +160,11 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
       vendor_name: '',
       warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
       ref_no: '',
-      concat: '',
+      contact: '',
       remarks: '',
       schedule_at: new Date().toISOString().slice(0, 16),
       status: 'Draft',
-      items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+      items: [{ product_id: products.length > 0 ? products[0].id : '', quantity: 0 }],
     });
     onClose();
   };
@@ -221,8 +222,8 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
             />
             <TextField
               label="Contact"
-              value={formValues.concat}
-              onChange={handleChange('concat')}
+              value={formValues.contact}
+              onChange={handleChange('contact')}
               fullWidth
               variant="outlined"
             />
@@ -300,13 +301,15 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
                       <TableCell align="right">
                         <TextField
                           type="number"
-                          value={item.qty || 0}
-                          onChange={handleItemChange(index, 'qty')}
+                          value={item.quantity || 0}
+                          onChange={handleItemChange(index, 'quantity')}
                           size="small"
                           variant="outlined"
                           required
-                          inputProps={{ min: 0, step: 1 }}
+                          inputProps={{ min: 0.01, step: 0.01 }}
                           sx={{ width: 120 }}
+                          error={item.quantity === 0 || item.quantity < 0}
+                          helperText={item.quantity === 0 || item.quantity < 0 ? 'Quantity must be greater than 0' : ''}
                         />
                       </TableCell>
                       <TableCell align="center">
