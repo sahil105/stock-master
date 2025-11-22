@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  IconButton,
   InputAdornment,
   Paper,
   Snackbar,
@@ -12,7 +13,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import { Search } from '@mui/icons-material';
+import { Add, Refresh, Search, ViewList, ViewModule } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import ReceiptDetailDialog from '../components/ReceiptDetailDialog';
 import ReceiptFormDialog from '../components/ReceiptFormDialog';
@@ -276,18 +277,43 @@ function ReceiptsPage() {
               }}
             />
             <ToggleButtonGroup value={viewMode} exclusive onChange={handleViewChange} size="small">
-              <ToggleButton value="list">List</ToggleButton>
-              <ToggleButton value="kanban">Kanban</ToggleButton>
+              <ToggleButton value="list">
+                <ViewList />
+              </ToggleButton>
+              <ToggleButton value="kanban">
+                <ViewModule />
+              </ToggleButton>
             </ToggleButtonGroup>
-            <Button variant="outlined" onClick={() => {
-              setSearchQuery('');
-              setReceiptsMeta((prev) => ({ ...prev, page: 1 }));
-            }}>
-              Refresh list
-            </Button>
-            <Button variant="contained" onClick={handleOpenFormDialog}>
-              New
-            </Button>
+            <IconButton 
+              variant="outlined" 
+              onClick={() => {
+                setSearchQuery('');
+                setReceiptsMeta((prev) => ({ ...prev, page: 1 }));
+              }}
+              sx={{ 
+                border: '1px solid rgba(0, 0, 0, 0.23)',
+                '&:hover': {
+                  border: '1px solid rgba(0, 0, 0, 0.87)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                },
+              }}
+            >
+              <Refresh />
+            </IconButton>
+            <IconButton 
+              variant="contained" 
+              color="primary"
+              onClick={handleOpenFormDialog}
+              sx={{ 
+                bgcolor: 'secondary.main',
+                color: 'white',
+                '&:hover': {
+                  bgcolor: 'secondary.dark',
+                },
+              }}
+            >
+              <Add />
+            </IconButton>
           </Stack>
         </Box>
 

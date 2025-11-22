@@ -4,16 +4,21 @@ import {
   Avatar, 
   Box, 
   Button, 
-  Chip, 
   Divider,
+  Drawer,
   IconButton,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   Menu, 
   MenuItem, 
   Stack, 
   Toolbar,
   Typography
 } from '@mui/material';
-import { AccountCircle, ExitToApp, Person } from '@mui/icons-material';
+import { ExitToApp, Menu as MenuIcon, NotificationsOutlined, Person } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LogoMark from './LogoMark';
 import { navSequence, operationsSubmenu, settingsSubmenu } from '../data/dashboardData';
@@ -24,9 +29,9 @@ function MainLayout({ children }) {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState(null);
-  const [profileAnchorEl, setProfileAnchorEl] = useState(null);
   const [user, setUser] = useState(null);
   const [activeMain, setActiveMain] = useState('Dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isOperationsActive = operationsSubmenu.some((item) => item.path === location.pathname);
   const isSettingsActive = settingsSubmenu.some((item) => item.path === location.pathname);
 
@@ -74,16 +79,8 @@ function MainLayout({ children }) {
     handleSettingsClose();
   };
 
-  const handleProfileClick = (event) => {
-    setProfileAnchorEl(event.currentTarget);
-  };
-
-  const handleProfileClose = () => {
-    setProfileAnchorEl(null);
-  };
-
   const handleProfileSelect = (action) => {
-    handleProfileClose();
+    setSidebarOpen(false);
     if (action === 'profile') {
       navigate('/profile');
     } else if (action === 'logout') {
@@ -105,84 +102,113 @@ function MainLayout({ children }) {
     return 'User';
   };
 
+  const drawerWidth = 260;
+
+  const handleSidebarToggle = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  const handleSidebarClose = () => {
+    setSidebarOpen(false);
+  };
+
   return (
-    <Box className="layout-root">
-      <AppBar position="sticky" className="top-nav" elevation={0} color="transparent">
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
+    <Box className="layout-root" sx={{ display: 'flex' }}>
+      <Drawer
+        variant="temporary"
+        open={sidebarOpen}
+        onClose={handleSidebarClose}
+        sx={{
+          width: drawerWidth,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            backgroundColor: '#ffffff',
+            borderRight: '1px solid rgba(15, 23, 42, 0.08)',
+            boxShadow: '2px 0 8px rgba(15, 23, 42, 0.08)',
+          },
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: '1px solid rgba(15, 23, 42, 0.08)' }}>
           <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar
+              sx={{
+                bgcolor: 'secondary.main',
+                color: 'white',
+                width: 48,
+                height: 48,
+                fontSize: '1rem',
+                fontWeight: 600,
+              }}
+            >
+              {getUserInitials()}
+            </Avatar>
             <Box>
-              <IconButton
-                onClick={handleProfileClick}
-                aria-controls="profile-menu"
-                aria-haspopup="true"
-                sx={{
-                  bgcolor: 'secondary.main',
-                  color: 'white',
-                  '&:hover': {
-                    bgcolor: 'secondary.dark',
-                  },
-                  width: 40,
-                  height: 40,
-                }}
-              >
-                <Avatar
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    bgcolor: 'rgba(255, 255, 255, 0.2)',
-                    color: 'white',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  {getUserInitials()}
-                </Avatar>
-              </IconButton>
-              <Menu
-                id="profile-menu"
-                anchorEl={profileAnchorEl}
-                open={Boolean(profileAnchorEl)}
-                onClose={handleProfileClose}
-                elevation={6}
-                transformOrigin={{ horizontal: 'left', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-                PaperProps={{
-                  sx: {
-                    mt: 1.5,
-                    minWidth: 200,
-                    '& .MuiMenuItem-root': {
-                      px: 2,
-                      py: 1.5,
-                    },
-                  },
-                }}
-              >
-                <Box sx={{ px: 2, py: 1.5 }}>
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {getUserName()}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {user?.email || 'user@example.com'}
-                  </Typography>
-                </Box>
-                <Divider />
-                <MenuItem onClick={() => handleProfileSelect('profile')}>
-                  <Person sx={{ mr: 1.5, fontSize: 20 }} />
-                  My Profile
-                </MenuItem>
-                <Divider />
-                <MenuItem 
-                  onClick={() => handleProfileSelect('logout')}
-                  sx={{ color: 'error.main' }}
-                >
-                  <ExitToApp sx={{ mr: 1.5, fontSize: 20 }} />
-                  Logout
-                </MenuItem>
-              </Menu>
+              <Typography variant="subtitle2" fontWeight={600}>
+                {getUserName()}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {user?.email || 'user@example.com'}
+              </Typography>
             </Box>
-            <LogoMark label="StockMaster" />
-            <Chip color="secondary" size="small" label="Live" />
           </Stack>
+        </Box>
+        <List sx={{ pt: 1 }}>
+          <ListItem disablePadding>
+            <ListItemButton
+              onClick={() => handleProfileSelect('profile')}
+              sx={{
+                py: 1.5,
+                px: 2,
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 122, 24, 0.08)',
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <Person sx={{ color: 'text.primary' }} />
+              </ListItemIcon>
+              <ListItemText primary="My Profile" />
+            </ListItemButton>
+          </ListItem>
+          <Divider />
+          <ListItem disablePadding>
+            <ListItemButton
+              onClick={() => handleProfileSelect('logout')}
+              sx={{
+                py: 1.5,
+                px: 2,
+                color: 'error.main',
+                '&:hover': {
+                  backgroundColor: 'rgba(211, 47, 47, 0.08)',
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <ExitToApp sx={{ color: 'error.main' }} />
+              </ListItemIcon>
+              <ListItemText primary="Logout" />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Drawer>
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+        <AppBar position="sticky" className="top-nav" elevation={0} color="transparent">
+          <Toolbar sx={{ justifyContent: 'space-between' }}>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <IconButton
+                edge="start"
+                color="inherit"
+                aria-label="menu"
+                onClick={handleSidebarToggle}
+                sx={{ mr: 1 }}
+              >
+                <MenuIcon />
+              </IconButton>
+              <LogoMark label="StockMaster" />
+              {/* <Chip color="secondary" size="small" label="Live" /> */}
+            </Stack>
           <Stack direction="row" spacing={1} className="nav-links">
             {navSequence.map((entry) => {
               if (entry.type === 'operations') {
@@ -259,8 +285,7 @@ function MainLayout({ children }) {
             })}
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Button
-              variant="outlined"
+            <IconButton
               color="inherit"
               onClick={() => {
                 navigate('/notifications');
@@ -268,13 +293,19 @@ function MainLayout({ children }) {
                   setActiveMain('Notifications');
                 }
               }}
+              sx={{
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                },
+              }}
             >
-              Notification
-            </Button>
+              <NotificationsOutlined />
+            </IconButton>
           </Stack>
         </Toolbar>
       </AppBar>
-      <Box className="main-panel">{children}</Box>
+      <Box className="main-panel" sx={{ ml: 0 }}>{children}</Box>
+      </Box>
     </Box>
   );
 }

@@ -3,12 +3,14 @@ import {
   Alert,
   Box,
   Button,
+  IconButton,
   Paper,
   Snackbar,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
+import { Add, Refresh } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import WarehouseFormDialog from '../components/WarehouseFormDialog';
 import PaginationControls from '../components/PaginationControls';
@@ -181,12 +183,33 @@ function WarehousesPage() {
           </Typography>
           <Typography color="text.secondary">Keep warehouse master data current.</Typography>
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            <Button variant="contained" onClick={handleOpenDialog}>
-              New
-            </Button>
-            <Button variant="outlined" onClick={fetchWarehouses}>
-              Refresh list
-            </Button>
+            <IconButton 
+              variant="contained" 
+              color="primary"
+              onClick={handleOpenDialog}
+              sx={{ 
+                bgcolor: 'secondary.main',
+                color: 'white',
+                '&:hover': {
+                  bgcolor: 'secondary.dark',
+                },
+              }}
+            >
+              <Add />
+            </IconButton>
+            <IconButton 
+              variant="outlined" 
+              onClick={fetchWarehouses}
+              sx={{ 
+                border: '1px solid rgba(0, 0, 0, 0.23)',
+                '&:hover': {
+                  border: '1px solid rgba(0, 0, 0, 0.87)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                },
+              }}
+            >
+              <Refresh />
+            </IconButton>
           </Stack>
         </Box>
 

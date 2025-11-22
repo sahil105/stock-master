@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  IconButton,
   InputAdornment,
   Paper,
   Snackbar,
@@ -10,7 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Search } from '@mui/icons-material';
+import { Refresh, Search } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import { DataGrid } from '@mui/x-data-grid';
 import { getStock } from '../services/stockApi';
@@ -154,9 +155,19 @@ function StockPage() {
                 ),
               }}
             />
-            <Button variant="outlined" onClick={fetchStock}>
-              Refresh
-            </Button>
+            <IconButton 
+              variant="outlined" 
+              onClick={fetchStock}
+              sx={{ 
+                border: '1px solid rgba(0, 0, 0, 0.23)',
+                '&:hover': {
+                  border: '1px solid rgba(0, 0, 0, 0.87)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                },
+              }}
+            >
+              <Refresh />
+            </IconButton>
             <Button variant="contained" onClick={() => {
               setSnackbar({
                 open: true,

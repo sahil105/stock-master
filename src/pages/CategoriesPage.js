@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  IconButton,
   InputAdornment,
   Paper,
   Snackbar,
@@ -10,7 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Search } from '@mui/icons-material';
+import { Refresh, Search } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import PaginationControls from '../components/PaginationControls';
 import { DataGrid } from '@mui/x-data-grid';
@@ -131,9 +132,19 @@ function CategoriesPage() {
                 ),
               }}
             />
-            <Button variant="outlined" onClick={fetchCategories}>
-              Refresh
-            </Button>
+            <IconButton 
+              variant="outlined" 
+              onClick={fetchCategories}
+              sx={{ 
+                border: '1px solid rgba(0, 0, 0, 0.23)',
+                '&:hover': {
+                  border: '1px solid rgba(0, 0, 0, 0.87)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                },
+              }}
+            >
+              <Refresh />
+            </IconButton>
           </Stack>
         </Box>
 

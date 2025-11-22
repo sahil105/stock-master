@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Box,
   Button,
+  IconButton,
   InputAdornment,
   Paper,
   Stack,
@@ -10,7 +11,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import { Search } from '@mui/icons-material';
+import { Add, Refresh, Search, ViewList, ViewModule } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import MoveHistoryFormDialog from '../components/MoveHistoryFormDialog';
 import MoveHistoryDetailDialog from '../components/MoveHistoryDetailDialog';
@@ -139,15 +140,40 @@ function MoveHistoryPage() {
               }}
             />
             <ToggleButtonGroup value={viewMode} exclusive onChange={handleViewChange} size="small">
-              <ToggleButton value="list">List</ToggleButton>
-              <ToggleButton value="kanban">Kanban</ToggleButton>
+              <ToggleButton value="list">
+                <ViewList />
+              </ToggleButton>
+              <ToggleButton value="kanban">
+                <ViewModule />
+              </ToggleButton>
             </ToggleButtonGroup>
-            <Button variant="outlined" onClick={() => setMoves(moveHistory)}>
-              Refresh list
-            </Button>
-            <Button variant="contained" onClick={() => setFormDialogOpen(true)}>
-              New
-            </Button>
+            <IconButton 
+              variant="outlined" 
+              onClick={() => setMoves(moveHistory)}
+              sx={{ 
+                border: '1px solid rgba(0, 0, 0, 0.23)',
+                '&:hover': {
+                  border: '1px solid rgba(0, 0, 0, 0.87)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                },
+              }}
+            >
+              <Refresh />
+            </IconButton>
+            <IconButton 
+              variant="contained" 
+              color="primary"
+              onClick={() => setFormDialogOpen(true)}
+              sx={{ 
+                bgcolor: 'secondary.main',
+                color: 'white',
+                '&:hover': {
+                  bgcolor: 'secondary.dark',
+                },
+              }}
+            >
+              <Add />
+            </IconButton>
           </Stack>
         </Box>
 
