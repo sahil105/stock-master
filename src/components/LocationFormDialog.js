@@ -14,43 +14,34 @@ import {
 } from '@mui/material';
 import { Close } from '@mui/icons-material';
 
-function ProductFormDialog({ open, onClose, product, onSave, categories = [], warehouses = [], loading = false }) {
+function LocationFormDialog({ open, onClose, location, onSave, warehouses = [] }) {
   const [formValues, setFormValues] = useState({
     name: '',
-    sku: '',
-    category_id: categories.length > 0 ? categories[0].id : '',
-    uom: '',
+    code: '',
     warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
-    reorder_level: 0,
   });
 
-  // Update form when product prop or categories change
+  // Update form when location prop or warehouses change
   useEffect(() => {
-    if (product) {
+    if (location) {
       setFormValues({
-        name: product.name || '',
-        sku: product.sku || '',
-        category_id: product.category_id || (categories.length > 0 ? categories[0].id : ''),
-        uom: product.uom || '',
-        warehouse_id: product.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
-        reorder_level: product.reorder_level || 0,
+        name: location.name || '',
+        code: location.code || '',
+        warehouse_id: location.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
       });
     } else {
-      // Reset form for new product
+      // Reset form for new location
       setFormValues({
         name: '',
-        sku: '',
-        category_id: categories.length > 0 ? categories[0].id : '',
-        uom: '',
+        code: '',
         warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
-        reorder_level: 0,
       });
     }
-  }, [product, categories, warehouses]);
+  }, [location, warehouses]);
 
   // Update warehouse_id when warehouses are loaded
   useEffect(() => {
-    if (!product && warehouses.length > 0) {
+    if (!location && warehouses.length > 0) {
       setFormValues((prev) => {
         if (prev.warehouse_id === '' || !prev.warehouse_id) {
           return { ...prev, warehouse_id: warehouses[0].id };
@@ -58,29 +49,24 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
         return prev;
       });
     }
-  }, [warehouses.length, product]);
+  }, [warehouses.length, location]);
 
   const handleChange = (field) => (event) => {
-    const value = field === 'category_id' || field === 'warehouse_id' || field === 'reorder_level'
-      ? Number(event.target.value) 
-      : event.target.value;
+    const value = field === 'warehouse_id' ? Number(event.target.value) : event.target.value;
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    if (!formValues.name || !formValues.sku) {
+    if (!formValues.name || !formValues.code || !formValues.warehouse_id) {
       return;
     }
 
     // Prepare API payload
     const apiPayload = {
       name: formValues.name,
-      sku: formValues.sku,
-      category_id: Number(formValues.category_id),
-      uom: formValues.uom || 'unit',
+      code: formValues.code,
       warehouse_id: Number(formValues.warehouse_id),
-      reorder_level: Number(formValues.reorder_level) || 0,
     };
 
     if (onSave) {
@@ -91,11 +77,8 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
   const handleCancel = () => {
     setFormValues({
       name: '',
-      sku: '',
-      category_id: categories[0]?.id,
-      uom: '',
-      warehouse_id: warehouses[0]?.id,
-      reorder_level: 0,
+      code: '',
+      warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
     });
     onClose();
   };
@@ -104,7 +87,7 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
     <Dialog open={open} onClose={handleCancel} maxWidth="md" fullWidth>
       <DialogTitle>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">{product ? 'Edit Product' : 'Create Product'}</Typography>
+          <Typography variant="h6">{location ? 'Edit Location' : 'Create Location'}</Typography>
           <IconButton onClick={handleCancel} size="small">
             <Close />
           </IconButton>
@@ -115,7 +98,7 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
         <Box component="form" onSubmit={handleSubmit} noValidate autoComplete="off" sx={{ mt: 2 }}>
           <Stack spacing={3}>
             <TextField
-              label="Product name"
+              label="Name"
               required
               value={formValues.name}
               onChange={handleChange('name')}
@@ -123,35 +106,10 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
               variant="outlined"
             />
             <TextField
-              label="SKU / Code"
+              label="Code"
               required
-              value={formValues.sku}
-              onChange={handleChange('sku')}
-              fullWidth
-              variant="outlined"
-            />
-            <TextField
-              label="Category"
-              select
-              value={formValues.category_id}
-              onChange={handleChange('category_id')}
-              fullWidth
-              required
-              variant="outlined"
-              disabled={loading || categories.length === 0}
-              helperText={loading ? 'Loading categories...' : categories.length === 0 ? 'No categories available' : ''}
-            >
-              {categories.map((cat) => (
-                <MenuItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Unit of measure"
-              required
-              value={formValues.uom}
-              onChange={handleChange('uom')}
+              value={formValues.code}
+              onChange={handleChange('code')}
               fullWidth
               variant="outlined"
             />
@@ -172,22 +130,15 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
                 </MenuItem>
               ))}
             </TextField>
-            <TextField
-              label="Reorder Level"
-              type="number"
-              required
-              value={formValues.reorder_level}
-              onChange={handleChange('reorder_level')}
-              fullWidth
-              inputProps={{ min: 0 }}
-              variant="outlined"
-            />
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              This holds the multiple locations of warehouse, rooms etc..
+            </Typography>
             <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 2 }}>
               <Button variant="outlined" onClick={handleCancel}>
                 Cancel
               </Button>
               <Button variant="contained" type="submit">
-                {product ? 'Update Product' : 'Save Product'}
+                {location ? 'Update Location' : 'Save Location'}
               </Button>
             </Stack>
           </Stack>
@@ -197,5 +148,5 @@ function ProductFormDialog({ open, onClose, product, onSave, categories = [], wa
   );
 }
 
-export default ProductFormDialog;
+export default LocationFormDialog;
 

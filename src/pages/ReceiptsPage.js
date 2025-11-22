@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
+  Alert,
   Box,
   Button,
-  Grid,
   InputAdornment,
   Paper,
+  Snackbar,
   Stack,
   TextField,
   ToggleButton,
@@ -14,28 +15,119 @@ import {
 import { Search } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import ReceiptDetailDialog from '../components/ReceiptDetailDialog';
-import { receipts } from '../data/dashboardData';
+import ReceiptFormDialog from '../components/ReceiptFormDialog';
+import PaginationControls from '../components/PaginationControls';
 import { DataGrid } from '@mui/x-data-grid';
+import { createReceipt, getReceipts } from '../services/receiptApi';
+import { getWarehouses } from '../services/warehouseApi';
+import { getProducts } from '../services/productApi';
 
 function ReceiptsPage() {
-  const [formOpen, setFormOpen] = useState(false);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [searchQuery, setSearchQuery] = useState('');
+  const [receiptsData, setReceiptsData] = useState([]);
+  const [receiptsLoading, setReceiptsLoading] = useState(true);
+  const [receiptsMeta, setReceiptsMeta] = useState({ total: 0, page: 1, limit: 25 });
+  const [warehouses, setWarehouses] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [warehousesLoading, setWarehousesLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
-  // Filter receipts based on search query (reference and contact)
-  const filteredReceipts = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return receipts;
+  // Fetch warehouses and products on component mount
+  useEffect(() => {
+    fetchWarehouses();
+    fetchProducts();
+  }, []);
+
+  // Fetch receipts when pagination changes
+  useEffect(() => {
+    fetchReceipts();
+  }, [receiptsMeta.page, receiptsMeta.limit, searchQuery]);
+
+  const fetchWarehouses = async () => {
+    setWarehousesLoading(true);
+    try {
+      const response = await getWarehouses();
+      if (response.success) {
+        setWarehouses(response.data || []);
+      } else {
+        console.error('Error fetching warehouses:', response.message);
+        // Keep empty array on error
+      }
+    } catch (error) {
+      console.error('Error fetching warehouses:', error);
+    } finally {
+      setWarehousesLoading(false);
     }
-    const query = searchQuery.toLowerCase().trim();
-    return receipts.filter(
-      (receipt) =>
-        receipt.reference?.toLowerCase().includes(query) ||
-        receipt.contact?.toLowerCase().includes(query)
-    );
-  }, [searchQuery]);
+  };
+
+  const fetchProducts = async () => {
+    setProductsLoading(true);
+    try {
+      const response = await getProducts();
+      if (response.success) {
+        setProducts(response.data || []);
+      } else {
+        console.error('Error fetching products:', response.message);
+        // Keep empty array on error
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const fetchReceipts = async () => {
+    setReceiptsLoading(true);
+    try {
+      const response = await getReceipts({
+        page: receiptsMeta.page,
+        limit: receiptsMeta.limit,
+        search: searchQuery,
+      });
+      if (response.success) {
+        setReceiptsData(response.data || []);
+        setReceiptsMeta(response.meta || { total: 0, page: 1, limit: 25 });
+      } else {
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+        } else {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Failed to load receipts.',
+            severity: 'error',
+          });
+        }
+        setReceiptsData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching receipts:', error);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while loading receipts.',
+        severity: 'error',
+      });
+      setReceiptsData([]);
+    } finally {
+      setReceiptsLoading(false);
+    }
+  };
+
+  // Use receiptsData directly (filtering is done on server side via search parameter)
+  const filteredReceipts = receiptsData;
   const columns = [
     { field: 'reference', headerName: 'Reference', flex: 1 },
     { field: 'from', headerName: 'From', flex: 1 },
@@ -46,6 +138,96 @@ function ReceiptsPage() {
   ];
   const handleViewChange = (_event, next) => {
     if (next) setViewMode(next);
+  };
+
+  // Handle save receipt from dialog (for both create and update)
+  const handleSaveReceipt = async (apiPayload, formValues) => {
+    try {
+      // Call API
+      const response = await createReceipt(apiPayload);
+
+      if (response.success) {
+        // Show success message
+        setSnackbar({
+          open: true,
+          message: selected ? 'Receipt updated successfully!' : 'Receipt created successfully!',
+          severity: 'success',
+        });
+
+        // Close dialogs
+        setFormDialogOpen(false);
+        if (selected) {
+          setDetailDialogOpen(false);
+          setSelected(null);
+        }
+
+        // Refresh receipts list from API
+        fetchReceipts();
+      } else {
+        // Handle 401 Unauthorized
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+          return;
+        }
+
+        // Handle 422 Validation Error
+        if (response.statusCode === 422 && response.errors && response.errors.length > 0) {
+          const errorMessages = response.errors.map((err) => {
+            const field = err.field || 'field';
+            return `${field}: ${err.message}`;
+          }).join(', ');
+
+          setSnackbar({
+            open: true,
+            message: `Validation error: ${errorMessages}`,
+            severity: 'error',
+          });
+          // Keep dialog open to allow user to fix errors
+          return;
+        }
+
+        // Handle other errors
+        setSnackbar({
+          open: true,
+          message: response.message || 'Failed to create receipt. Please try again.',
+          severity: 'error',
+        });
+      }
+    } catch (error) {
+      console.error('Error creating receipt:', error);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while creating the receipt. Please try again.',
+        severity: 'error',
+      });
+    }
+  };
+
+  const handleOpenFormDialog = () => {
+    setFormDialogOpen(true);
+  };
+
+  const handleCloseFormDialog = () => {
+    setFormDialogOpen(false);
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbar((prev) => ({ ...prev, open: false }));
+  };
+
+  const handlePageChange = (newPage) => {
+    setReceiptsMeta((prev) => ({ ...prev, page: newPage }));
+  };
+
+  const handlePageSizeChange = (newLimit) => {
+    setReceiptsMeta((prev) => ({ ...prev, limit: newLimit, page: 1 }));
   };
 
   return (
@@ -75,10 +257,13 @@ function ReceiptsPage() {
               <ToggleButton value="list">List</ToggleButton>
               <ToggleButton value="kanban">Kanban</ToggleButton>
             </ToggleButtonGroup>
-            <Button variant="outlined" onClick={() => setFormOpen(false)}>
+            <Button variant="outlined" onClick={() => {
+              setSearchQuery('');
+              setReceiptsMeta((prev) => ({ ...prev, page: 1 }));
+            }}>
               Refresh list
             </Button>
-            <Button variant="contained" onClick={() => setFormOpen(true)}>
+            <Button variant="contained" onClick={handleOpenFormDialog}>
               New
             </Button>
           </Stack>
@@ -97,8 +282,9 @@ function ReceiptsPage() {
                 density="compact"
                 onRowClick={(params) => {
                   setSelected(params.row);
-                  setDialogOpen(true);
+                  setDetailDialogOpen(true);
                 }}
+                loading={receiptsLoading}
               />
             </Box>
           ) : (
@@ -109,7 +295,7 @@ function ReceiptsPage() {
                   elevation={3}
                   onClick={() => {
                     setSelected(receipt);
-                    setDialogOpen(true);
+                    setDetailDialogOpen(true);
                   }}
                   sx={{
                     flex: '1 1 220px',
@@ -137,32 +323,27 @@ function ReceiptsPage() {
               ))}
             </Box>
           )}
+          <PaginationControls
+            meta={receiptsMeta}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            loading={receiptsLoading}
+          />
         </Paper>
 
-        {formOpen && (
-          <Paper elevation={3} sx={{ p: 3 }}>
-            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-              Create Receipt
-            </Typography>
-            <Stack spacing={2}>
-              <TextField label="Vendor" defaultValue="" fullWidth />
-              <TextField label="Warehouse" select SelectProps={{ native: true }} fullWidth>
-                <option value="Main Warehouse">Main Warehouse</option>
-                <option value="Warehouse 2">Warehouse 2</option>
-              </TextField>
-              <TextField label="Product" defaultValue="Steel Rods" fullWidth />
-              <TextField label="Quantity" defaultValue="150 kg" fullWidth />
-              <Button variant="contained" fullWidth>
-                Save & Validate
-              </Button>
-            </Stack>
-          </Paper>
-        )}
       </Stack>
+      <ReceiptFormDialog
+        open={formDialogOpen}
+        onClose={handleCloseFormDialog}
+        receipt={null}
+        onSave={handleSaveReceipt}
+        warehouses={warehouses}
+        products={products}
+      />
       <ReceiptDetailDialog
-        open={dialogOpen}
+        open={detailDialogOpen}
         onClose={() => {
-          setDialogOpen(false);
+          setDetailDialogOpen(false);
           setSelected(null);
         }}
         receipt={selected}
@@ -171,7 +352,20 @@ function ReceiptsPage() {
             setSelected({ ...selected, status: newStatus });
           }
         }}
+        onSave={handleSaveReceipt}
+        warehouses={warehouses}
+        products={products}
       />
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </MainLayout>
   );
 }

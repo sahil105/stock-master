@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Alert,
   Box,
@@ -15,29 +15,29 @@ import {
 import { Search } from '@mui/icons-material';
 import MainLayout from '../components/MainLayout';
 import ProductFormDialog from '../components/ProductFormDialog';
+import PaginationControls from '../components/PaginationControls';
 import { DataGrid } from '@mui/x-data-grid';
-import { createProduct } from '../services/productApi';
-
-// Categories with IDs matching API structure
-const categories = [
-  { id: 1, name: 'Raw Materials' },
-  { id: 2, name: 'Components' },
-  { id: 3, name: 'Fasteners' },
-  { id: 4, name: 'Packaging' },
-  { id: 5, name: 'Furniture' },
-];
+import { createProduct, getProducts } from '../services/productApi';
+import { getCategories } from '../services/categoryApi';
+import { getWarehouses } from '../services/warehouseApi';
 
 // Static products data - in real app this would come from API
 const initialProducts = [
-  { id: 1, name: 'Steel Rods', sku: 'STL-001', category_id: 1, category_name: 'Raw Materials', uom: 'kg', reorder_level: 1000 },
-  { id: 2, name: 'Frame Bolts', sku: 'BLT-101', category_id: 3, category_name: 'Fasteners', uom: 'pcs', reorder_level: 200 },
-  { id: 3, name: 'Panel Sheets', sku: 'PNL-302', category_id: 2, category_name: 'Components', uom: 'sqm', reorder_level: 50 },
-  { id: 4, name: 'Desk', sku: 'DESK001', category_id: 5, category_name: 'Furniture', uom: 'unit', reorder_level: 10 },
-  { id: 5, name: 'Table', sku: 'TBL001', category_id: 5, category_name: 'Furniture', uom: 'unit', reorder_level: 10 },
+  { id: 1, name: 'Steel Rods', sku: 'STL-001', category_id: 1, category_name: 'Raw Materials', uom: 'kg' },
+  { id: 2, name: 'Frame Bolts', sku: 'BLT-101', category_id: 3, category_name: 'Fasteners', uom: 'pcs' },
+  { id: 3, name: 'Panel Sheets', sku: 'PNL-302', category_id: 2, category_name: 'Components', uom: 'sqm' },
+  { id: 4, name: 'Desk', sku: 'DESK001', category_id: 5, category_name: 'Furniture', uom: 'unit' },
+  { id: 5, name: 'Table', sku: 'TBL001', category_id: 5, category_name: 'Furniture', uom: 'unit' },
 ];
 
 function ProductsPage() {
-  const [products, setProducts] = useState(initialProducts);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsMeta, setProductsMeta] = useState({ total: 0, page: 1, limit: 25 });
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [warehouses, setWarehouses] = useState([]);
+  const [warehousesLoading, setWarehousesLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [viewMode, setViewMode] = useState('list');
@@ -47,6 +47,106 @@ function ProductsPage() {
     message: '',
     severity: 'success', // 'success' | 'error' | 'warning' | 'info'
   });
+
+  // Fetch categories and warehouses on component mount
+  useEffect(() => {
+    fetchCategories();
+    fetchWarehouses();
+  }, []);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [productsMeta.page, productsMeta.limit]);
+
+  const fetchProducts = async () => {
+    setProductsLoading(true);
+    try {
+      const response = await getProducts({ page: productsMeta.page, limit: productsMeta.limit });
+      
+      if (response.success) {
+        // Get categories if not already loaded
+        let categoriesData = categories;
+        if (categories.length === 0) {
+          const catResponse = await getCategories();
+          if (catResponse.success) {
+            categoriesData = catResponse.data || [];
+            setCategories(categoriesData);
+          }
+        }
+
+        // Map API data to include category_name for display
+        const productsWithCategoryNames = response.data.map((product) => {
+          const category = categoriesData.find((cat) => cat.id === product.category_id);
+          return {
+            ...product,
+            category_name: category?.name || 'Unknown Category',
+          };
+        });
+        
+        setProducts(productsWithCategoryNames);
+        setProductsMeta(response.meta || { total: 0, page: 1, limit: 25 });
+      } else {
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+        } else {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Failed to load products.',
+            severity: 'error',
+          });
+        }
+        setProducts([]);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while loading products.',
+        severity: 'error',
+      });
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      const response = await getCategories();
+      if (response.success) {
+        setCategories(response.data || []);
+      } else {
+        console.error('Error fetching categories:', response.message);
+        // Keep empty array on error, will show in form
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  const fetchWarehouses = async () => {
+    setWarehousesLoading(true);
+    try {
+      const response = await getWarehouses();
+      if (response.success) {
+        setWarehouses(response.data || []);
+      } else {
+        console.error('Error fetching warehouses:', response.message);
+        // Keep empty array on error, will show in form
+      }
+    } catch (error) {
+      console.error('Error fetching warehouses:', error);
+    } finally {
+      setWarehousesLoading(false);
+    }
+  };
 
   // Filter products based on search query
   const filteredProducts = useMemo(() => {
@@ -76,7 +176,10 @@ function ProductsPage() {
       field: 'reorder_level',
       headerName: 'Reorder Level',
       flex: 1,
-      valueGetter: (params) => params.row?.reorder_level || 0,
+      valueGetter: (params) => {
+        const value = params.row?.reorder_level;
+        return value !== undefined && value !== null ? value : 0;
+      },
     },
   ];
 
@@ -91,52 +194,53 @@ function ProductsPage() {
       const response = await createProduct(apiPayload);
       
       if (response.success) {
-        // Find category name for display
-        const selectedCategory = categories.find((cat) => cat.id === formValues.category_id);
-        
-        if (selectedProduct) {
-          // Update existing product
-          setProducts((prev) =>
-            prev.map((p) =>
-              p.id === selectedProduct.id
-                ? {
-                    ...p,
-                    ...apiPayload,
-                    category_name: selectedCategory?.name || '',
-                  }
-                : p
-            )
-          );
-          // Show success message
-          setSnackbar({
-            open: true,
-            message: 'Product updated successfully!',
-            severity: 'success',
-          });
-        } else {
-          // Add new product
-          const newProduct = {
-            id: response.data?.id || Date.now(),
-            ...apiPayload,
-            category_name: selectedCategory?.name || '',
-          };
-          setProducts((prev) => [newProduct, ...prev]);
-          // Show success message
-          setSnackbar({
-            open: true,
-            message: 'Product created successfully!',
-            severity: 'success',
-          });
-        }
+        // Show success message
+        setSnackbar({
+          open: true,
+          message: selectedProduct ? 'Product updated successfully!' : 'Product created successfully!',
+          severity: 'success',
+        });
         
         // Close dialog
         setDialogOpen(false);
         setSelectedProduct(null);
+        
+        // Refresh products list from API
+        fetchProducts();
       } else {
-        // Show error message
+        // Handle 401 Unauthorized
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+          // TODO: Redirect to login page if needed
+          // navigate('/login');
+          return;
+        }
+
+        // Handle 422 Validation Error
+        if (response.statusCode === 422 && response.errors && response.errors.length > 0) {
+          // Format validation errors
+          const errorMessages = response.errors.map((err) => {
+            const field = err.field || 'field';
+            return `${field}: ${err.message}`;
+          }).join(', ');
+          
+          setSnackbar({
+            open: true,
+            message: `Validation error: ${errorMessages}`,
+            severity: 'error',
+          });
+          // Keep dialog open to allow user to fix errors
+          return;
+        }
+
+        // Handle other errors
         setSnackbar({
           open: true,
-          message: response.error || 'Failed to save product. Please try again.',
+          message: response.message || 'Failed to save product. Please try again.',
           severity: 'error',
         });
       }
@@ -166,6 +270,14 @@ function ProductsPage() {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setSelectedProduct(null);
+  };
+
+  const handlePageChange = (newPage) => {
+    setProductsMeta((prev) => ({ ...prev, page: newPage }));
+  };
+
+  const handlePageSizeChange = (newLimit) => {
+    setProductsMeta((prev) => ({ ...prev, limit: newLimit, page: 1 }));
   };
 
   return (
@@ -198,7 +310,10 @@ function ProductsPage() {
               <ToggleButton value="list">List</ToggleButton>
               <ToggleButton value="kanban">Kanban</ToggleButton>
             </ToggleButtonGroup>
-            <Button variant="outlined" onClick={() => setSearchQuery('')}>
+            <Button variant="outlined" onClick={() => {
+              setSearchQuery('');
+              fetchProducts();
+            }}>
               Refresh list
             </Button>
             <Button variant="contained" onClick={handleOpenDialog}>
@@ -213,40 +328,93 @@ function ProductsPage() {
           </Typography>
           {viewMode === 'list' ? (
             <Box sx={{ height: 320 }}>
-              <DataGrid rows={filteredProducts} columns={columns} hideFooter density="compact" disableRowSelectionOnClick />
+              <DataGrid 
+                rows={filteredProducts} 
+                columns={columns} 
+                hideFooter 
+                density="compact" 
+                disableRowSelectionOnClick
+                loading={productsLoading}
+              />
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', minHeight: 320 }}>
-              {filteredProducts.map((product) => (
-                <Paper
-                  key={product.id}
-                  elevation={3}
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', minHeight: 320 }}>
+              {productsLoading ? (
+                <Box
                   sx={{
-                    flex: '1 1 220px',
-                    minWidth: 220,
-                    p: 2,
-                    cursor: 'pointer',
-                    '&:hover': {
-                      boxShadow: 6,
-                    },
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    minHeight: 320,
                   }}
                 >
-                  <Typography variant="subtitle2" color="text.secondary">
-                    {product.sku}
+                  <Typography variant="body2" color="text.secondary">
+                    Loading products...
                   </Typography>
-                  <Typography variant="body1" fontWeight={600}>
-                    {product.name}
+                </Box>
+              ) : filteredProducts.length > 0 ? (
+                filteredProducts.map((product) => (
+                  <Paper
+                    key={product.id}
+                    elevation={3}
+                    sx={{
+                      width: { xs: '100%', sm: 'calc(50% - 8px)', md: 'calc(33.333% - 11px)', lg: 'calc(25% - 12px)' },
+                      minWidth: 220,
+                      maxWidth: 280,
+                      p: 2,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      '&:hover': {
+                        boxShadow: 6,
+                        transform: 'translateY(-2px)',
+                        transition: 'all 0.2s ease-in-out',
+                      },
+                    }}
+                  >
+                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
+                      {product.sku || 'N/A'}
+                    </Typography>
+                    <Typography variant="body1" fontWeight={600} sx={{ mb: 1 }}>
+                      {product.name || 'Unnamed Product'}
+                    </Typography>
+                    <Stack spacing={0.5} sx={{ mt: 'auto', pt: 1 }}>
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        <strong>Category:</strong> {product.category_name || 'N/A'}
+                      </Typography>
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        <strong>Unit:</strong> {product.uom || 'N/A'}
+                      </Typography>
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        <strong>Reorder Level:</strong> {(product.reorder_level !== undefined && product.reorder_level !== null) ? Number(product.reorder_level) : 0} {product.uom || ''}
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                ))
+              ) : (
+                <Box
+                  sx={{
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    minHeight: 320,
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    No products found. Try adjusting your search or create a new product.
                   </Typography>
-                  <Typography variant="caption" display="block" mt={1}>
-                    Category: {product.category_name}
-                  </Typography>
-                  <Typography variant="caption" display="block">
-                    Reorder Level: {product.reorder_level} {product.uom}
-                  </Typography>
-                </Paper>
-              ))}
+                </Box>
+              )}
             </Box>
           )}
+          <PaginationControls
+            meta={productsMeta}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            loading={productsLoading}
+          />
         </Paper>
 
       </Stack>
@@ -255,6 +423,9 @@ function ProductsPage() {
         onClose={handleCloseDialog}
         product={selectedProduct}
         onSave={handleSaveProduct}
+        categories={categories}
+        warehouses={warehouses}
+        loading={categoriesLoading || warehousesLoading}
       />
       <Snackbar
         open={snackbar.open}

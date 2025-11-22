@@ -1,53 +1,175 @@
-import { useState } from 'react';
-import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Paper,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import MainLayout from '../components/MainLayout';
-import { warehouses } from '../data/dashboardData';
+import WarehouseFormDialog from '../components/WarehouseFormDialog';
+import PaginationControls from '../components/PaginationControls';
 import { DataGrid } from '@mui/x-data-grid';
+import { createWarehouse, getWarehouses } from '../services/warehouseApi';
 
 function WarehousesPage() {
-  const [formOpen, setFormOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    shortCode: '',
-    address: '',
+  const [warehousesData, setWarehousesData] = useState([]);
+  const [warehousesLoading, setWarehousesLoading] = useState(true);
+  const [warehousesMeta, setWarehousesMeta] = useState({ total: 0, page: 1, limit: 25 });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedWarehouse, setSelectedWarehouse] = useState(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
   });
-  const [rows, setRows] = useState(
-    warehouses.map((w, index) => ({
-      id: w.code || `wh-${index}`,
-      name: w.name,
-      shortCode: w.code,
-      address: w.address,
-      status: w.status,
-    }))
-  );
 
-  const handleInputChange = (field) => (event) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: event.target.value,
-    }));
+  // Fetch warehouses on component mount and when pagination changes
+  useEffect(() => {
+    fetchWarehouses();
+  }, [warehousesMeta.page, warehousesMeta.limit]);
+
+  const fetchWarehouses = async () => {
+    setWarehousesLoading(true);
+    try {
+      const response = await getWarehouses({ page: warehousesMeta.page, limit: warehousesMeta.limit });
+      if (response.success) {
+        setWarehousesData(response.data || []);
+        setWarehousesMeta(response.meta || { total: 0, page: 1, limit: 25 });
+      } else {
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+        } else {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Failed to load warehouses.',
+            severity: 'error',
+          });
+        }
+        setWarehousesData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching warehouses:', error);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while loading warehouses.',
+        severity: 'error',
+      });
+      setWarehousesData([]);
+    } finally {
+      setWarehousesLoading(false);
+    }
   };
 
-  const handleSave = () => {
-    if (formData.name && formData.shortCode) {
-      const newRow = {
-        id: formData.shortCode,
-        name: formData.name,
-        shortCode: formData.shortCode,
-        address: formData.address,
-        status: 'Active',
-      };
-      setRows((prev) => [...prev, newRow]);
-      setFormData({ name: '', shortCode: '', address: '' });
-      setFormOpen(false);
+  // Handle save warehouse from dialog
+  const handleSaveWarehouse = async (apiPayload, formValues) => {
+    try {
+      const response = await createWarehouse(apiPayload);
+
+      if (response.success) {
+        // Show success message
+        setSnackbar({
+          open: true,
+          message: selectedWarehouse ? 'Warehouse updated successfully!' : 'Warehouse created successfully!',
+          severity: 'success',
+        });
+
+        // Close dialog
+        setDialogOpen(false);
+        setSelectedWarehouse(null);
+
+        // Refresh warehouses list from API
+        fetchWarehouses();
+      } else {
+        // Handle 401 Unauthorized
+        if (response.statusCode === 401) {
+          setSnackbar({
+            open: true,
+            message: response.message || 'Unauthorized access. Please login again.',
+            severity: 'error',
+          });
+          return;
+        }
+
+        // Handle 422 Validation Error
+        if (response.statusCode === 422 && response.errors && response.errors.length > 0) {
+          const errorMessages = response.errors.map((err) => {
+            const field = err.field || 'field';
+            return `${field}: ${err.message}`;
+          }).join(', ');
+
+          setSnackbar({
+            open: true,
+            message: `Validation error: ${errorMessages}`,
+            severity: 'error',
+          });
+          // Keep dialog open to allow user to fix errors
+          return;
+        }
+
+        // Handle other errors
+        setSnackbar({
+          open: true,
+          message: response.message || 'Failed to save warehouse. Please try again.',
+          severity: 'error',
+        });
+      }
+    } catch (error) {
+      console.error('Error saving warehouse:', error);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while saving the warehouse. Please try again.',
+        severity: 'error',
+      });
     }
+  };
+
+  const handleOpenDialog = () => {
+    setSelectedWarehouse(null);
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setSelectedWarehouse(null);
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbar((prev) => ({ ...prev, open: false }));
+  };
+
+  const handlePageChange = (newPage) => {
+    setWarehousesMeta((prev) => ({ ...prev, page: newPage }));
+  };
+
+  const handlePageSizeChange = (newLimit) => {
+    setWarehousesMeta((prev) => ({ ...prev, limit: newLimit, page: 1 }));
   };
 
   const columns = [
     { field: 'name', headerName: 'Name', flex: 1 },
-    { field: 'shortCode', headerName: 'Short Code', flex: 1 },
+    { field: 'code', headerName: 'Code', flex: 1 },
     { field: 'address', headerName: 'Address', flex: 2 },
-    { field: 'status', headerName: 'Status', flex: 0.8 },
+    {
+      field: 'created_at',
+      headerName: 'Created At',
+      flex: 1,
+      valueGetter: (params) => {
+        if (!params.row?.created_at) return 'N/A';
+        const date = new Date(params.row.created_at);
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+      },
+    },
   ];
 
   return (
@@ -59,67 +181,64 @@ function WarehousesPage() {
           </Typography>
           <Typography color="text.secondary">Keep warehouse master data current.</Typography>
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            <Button variant="contained" onClick={() => setFormOpen(true)}>
+            <Button variant="contained" onClick={handleOpenDialog}>
               New
             </Button>
-            <Button variant="outlined" onClick={() => setFormOpen(false)}>
+            <Button variant="outlined" onClick={fetchWarehouses}>
               Refresh list
             </Button>
           </Stack>
         </Box>
 
-        {formOpen && (
-          <Paper elevation={3} sx={{ p: 3 }}>
-            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 3 }}>
-              Create Warehouse
-            </Typography>
-            <Stack spacing={3}>
-              <TextField
-                label="Name"
-                value={formData.name}
-                onChange={handleInputChange('name')}
-                fullWidth
-                required
-                variant="outlined"
-              />
-              <TextField
-                label="Short Code"
-                value={formData.shortCode}
-                onChange={handleInputChange('shortCode')}
-                fullWidth
-                required
-                variant="outlined"
-              />
-              <TextField
-                label="Address"
-                value={formData.address}
-                onChange={handleInputChange('address')}
-                fullWidth
-                multiline
-                rows={2}
-                variant="outlined"
-              />
-              <Stack direction="row" spacing={2} justifyContent="flex-end">
-                <Button variant="outlined" onClick={() => setFormOpen(false)}>
-                  Cancel
-                </Button>
-                <Button variant="contained" onClick={handleSave}>
-                  Save
-                </Button>
-              </Stack>
-            </Stack>
-          </Paper>
-        )}
-
         <Paper elevation={3} sx={{ p: 2 }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-            Warehouse register / list view
-          </Typography>
-          <Box sx={{ height: 400 }}>
-            <DataGrid rows={rows} columns={columns} hideFooter density="compact" disableRowSelectionOnClick />
-          </Box>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="subtitle1" fontWeight={600}>
+              Warehouse register / list view
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Total: {warehousesMeta.total} | Page: {warehousesMeta.page} | Limit: {warehousesMeta.limit}
+            </Typography>
+          </Stack>
+          {warehousesLoading ? (
+            <Box sx={{ height: 400, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <Typography>Loading warehouses...</Typography>
+            </Box>
+          ) : (
+            <Box sx={{ height: 400 }}>
+              <DataGrid
+                rows={warehousesData}
+                columns={columns}
+                hideFooter
+                density="compact"
+                disableRowSelectionOnClick
+                loading={warehousesLoading}
+              />
+            </Box>
+          )}
+          <PaginationControls
+            meta={warehousesMeta}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            loading={warehousesLoading}
+          />
         </Paper>
       </Stack>
+      <WarehouseFormDialog
+        open={dialogOpen}
+        onClose={handleCloseDialog}
+        warehouse={selectedWarehouse}
+        onSave={handleSaveWarehouse}
+      />
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </MainLayout>
   );
 }
