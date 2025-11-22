@@ -229,9 +229,9 @@ function DeliveryDetailDialog({ open, onClose, delivery, onStatusChange, onSave,
             {!isNewDelivery && <Chip label={delivery?.reference || delivery?.ref_no || 'WH/OUT/0001'} color="primary" />}
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2" color="text.secondary">
+            {/* <Typography variant="body2" color="text.secondary">
               Draft > Waiting > Ready > Done
-            </Typography>
+            </Typography> */}
             <IconButton onClick={onClose} size="small">
               <Close />
             </IconButton>
