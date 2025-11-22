@@ -110,6 +110,76 @@ function MainLayout({ children }) {
       <AppBar position="sticky" className="top-nav" elevation={0} color="transparent">
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Stack direction="row" alignItems="center" spacing={2}>
+            <Box>
+              <IconButton
+                onClick={handleProfileClick}
+                aria-controls="profile-menu"
+                aria-haspopup="true"
+                sx={{
+                  bgcolor: 'secondary.main',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: 'secondary.dark',
+                  },
+                  width: 40,
+                  height: 40,
+                }}
+              >
+                <Avatar
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    bgcolor: 'rgba(255, 255, 255, 0.2)',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {getUserInitials()}
+                </Avatar>
+              </IconButton>
+              <Menu
+                id="profile-menu"
+                anchorEl={profileAnchorEl}
+                open={Boolean(profileAnchorEl)}
+                onClose={handleProfileClose}
+                elevation={6}
+                transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+                PaperProps={{
+                  sx: {
+                    mt: 1.5,
+                    minWidth: 200,
+                    '& .MuiMenuItem-root': {
+                      px: 2,
+                      py: 1.5,
+                    },
+                  },
+                }}
+              >
+                <Box sx={{ px: 2, py: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {getUserName()}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {user?.email || 'user@example.com'}
+                  </Typography>
+                </Box>
+                <Divider />
+                <MenuItem onClick={() => handleProfileSelect('profile')}>
+                  <Person sx={{ mr: 1.5, fontSize: 20 }} />
+                  My Profile
+                </MenuItem>
+                <Divider />
+                <MenuItem 
+                  onClick={() => handleProfileSelect('logout')}
+                  sx={{ color: 'error.main' }}
+                >
+                  <ExitToApp sx={{ mr: 1.5, fontSize: 20 }} />
+                  Logout
+                </MenuItem>
+              </Menu>
+            </Box>
             <LogoMark label="StockMaster" />
             <Chip color="secondary" size="small" label="Live" />
           </Stack>
@@ -201,76 +271,6 @@ function MainLayout({ children }) {
             >
               Notification
             </Button>
-            <Box>
-              <IconButton
-                onClick={handleProfileClick}
-                aria-controls="profile-menu"
-                aria-haspopup="true"
-                sx={{
-                  bgcolor: 'secondary.main',
-                  color: 'white',
-                  '&:hover': {
-                    bgcolor: 'secondary.dark',
-                  },
-                  width: 40,
-                  height: 40,
-                }}
-              >
-                <Avatar
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    bgcolor: 'rgba(255, 255, 255, 0.2)',
-                    color: 'white',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  {getUserInitials()}
-                </Avatar>
-              </IconButton>
-              <Menu
-                id="profile-menu"
-                anchorEl={profileAnchorEl}
-                open={Boolean(profileAnchorEl)}
-                onClose={handleProfileClose}
-                elevation={6}
-                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                PaperProps={{
-                  sx: {
-                    mt: 1.5,
-                    minWidth: 200,
-                    '& .MuiMenuItem-root': {
-                      px: 2,
-                      py: 1.5,
-                    },
-                  },
-                }}
-              >
-                <Box sx={{ px: 2, py: 1.5 }}>
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {getUserName()}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {user?.email || 'user@example.com'}
-                  </Typography>
-                </Box>
-                <Divider />
-                <MenuItem onClick={() => handleProfileSelect('profile')}>
-                  <Person sx={{ mr: 1.5, fontSize: 20 }} />
-                  My Profile
-                </MenuItem>
-                <Divider />
-                <MenuItem 
-                  onClick={() => handleProfileSelect('logout')}
-                  sx={{ color: 'error.main' }}
-                >
-                  <ExitToApp sx={{ mr: 1.5, fontSize: 20 }} />
-                  Logout
-                </MenuItem>
-              </Menu>
-            </Box>
           </Stack>
         </Toolbar>
       </AppBar>
