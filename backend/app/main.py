@@ -961,11 +961,13 @@ from collections import defaultdict
 @app.get("/api/v1/products_stock", tags=["Products"])
 def get_product_stock(
     search: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
     conn = Depends(get_db)
 ):
     """
     Get product stock grouped by product, listing details per warehouse.
     Uses the 'on_hand' and 'reserved' columns from your schema.
+    Returns all products, even if they don't have stock entries yet.
     """
     cursor = conn.cursor(dictionary=True)
     
@@ -979,7 +981,7 @@ def get_product_stock(
         
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
-    # 2. Fetch Data (Join Products, Stock Snapshot, and Warehouses)
+    # 2. Fetch Data (LEFT JOIN to include all products, even without stock entries)
     # We use COALESCE to handle cases where a product has no stock entry yet (returns 0)
     # Note: Schema uses 'on_hand' column
     query = f"""
@@ -987,15 +989,15 @@ def get_product_stock(
             p.id as product_id,
             p.name as product_name,
             p.sku,
-            w.id as warehouse_id,
-            w.name as warehouse_name,
+            COALESCE(w.id, NULL) as warehouse_id,
+            COALESCE(w.name, NULL) as warehouse_name,
             COALESCE(ss.on_hand, 0) as on_hand,
             COALESCE(ss.reserved, 0) as reserved
         FROM products p
-        JOIN stock_snapshot ss ON p.id = ss.product_id
-        JOIN warehouses w ON ss.warehouse_id = w.id
+        LEFT JOIN stock_snapshot ss ON p.id = ss.product_id
+        LEFT JOIN warehouses w ON ss.warehouse_id = w.id
         {where_clause}
-        ORDER BY p.id, w.id
+        ORDER BY p.id, COALESCE(w.id, 0)
     """
     
     cursor.execute(query, params)
@@ -1020,19 +1022,21 @@ def get_product_stock(
             grouped_stock[pid]["product_name"] = row["product_name"]
             grouped_stock[pid]["sku"] = row["sku"]
         
-        # Calculate Free to Use
-        on_hand = float(row["on_hand"])
-        reserved = float(row["reserved"])
-        free_to_use = on_hand - reserved
-        
-        # Append warehouse detail
-        grouped_stock[pid]["stock_by_warehouse"].append({
-            "warehouse_id": row["warehouse_id"],
-            "warehouse_name": row["warehouse_name"],
-            "on_hand": on_hand,
-            "reserved": reserved,
-            "free_to_use": free_to_use
-        })
+        # Only add warehouse detail if warehouse_id exists (product has stock entry)
+        if row["warehouse_id"] is not None:
+            # Calculate Free to Use
+            on_hand = float(row["on_hand"]) if row["on_hand"] else 0
+            reserved = float(row["reserved"]) if row["reserved"] else 0
+            free_to_use = on_hand - reserved
+            
+            # Append warehouse detail
+            grouped_stock[pid]["stock_by_warehouse"].append({
+                "warehouse_id": row["warehouse_id"],
+                "warehouse_name": row["warehouse_name"],
+                "on_hand": on_hand,
+                "reserved": reserved,
+                "free_to_use": free_to_use
+            })
 
     # 4. Convert dictionary values to a list for the JSON response
     return {"data": list(grouped_stock.values())}

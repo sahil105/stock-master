@@ -34,11 +34,18 @@ function StockPage() {
     setLoading(true);
     try {
       const response = await getStock();
+      console.log('Stock API Response:', response); // Debug log
+      
       if (response.success) {
         // Backend returns grouped data: { data: [{ product_id, product_name, sku, stock_by_warehouse: [...] }] }
         // We need to flatten it to show one row per product-warehouse combination
         const flattenedStock = [];
-        response.data.forEach((product) => {
+        
+        // Ensure response.data is an array
+        const stockData = Array.isArray(response.data) ? response.data : [];
+        console.log('Stock data array:', stockData); // Debug log
+        
+        stockData.forEach((product) => {
           if (product.stock_by_warehouse && product.stock_by_warehouse.length > 0) {
             product.stock_by_warehouse.forEach((warehouseStock) => {
               flattenedStock.push({
@@ -46,7 +53,9 @@ function StockPage() {
                 product: product.product_name || 'Unknown Product',
                 perUnitCost: 0, // Cost not available in stock endpoint
                 onHand: warehouseStock.on_hand || 0,
-                freeToUse: warehouseStock.free_to_use || (warehouseStock.on_hand - (warehouseStock.reserved || 0)) || 0,
+                freeToUse: warehouseStock.free_to_use !== undefined 
+                  ? warehouseStock.free_to_use 
+                  : ((warehouseStock.on_hand || 0) - (warehouseStock.reserved || 0)),
                 warehouse: warehouseStock.warehouse_name || `Warehouse ${warehouseStock.warehouse_id}`,
                 sku: product.sku || 'N/A',
                 reserved: warehouseStock.reserved || 0,
@@ -55,7 +64,7 @@ function StockPage() {
               });
             });
           } else {
-            // Product with no stock entries
+            // Product with no stock entries - still show it
             flattenedStock.push({
               id: `${product.product_id}_0`,
               product: product.product_name || 'Unknown Product',
@@ -70,7 +79,17 @@ function StockPage() {
             });
           }
         });
+        
+        console.log('Flattened stock rows:', flattenedStock); // Debug log
         setRows(flattenedStock);
+        
+        if (flattenedStock.length === 0) {
+          setSnackbar({
+            open: true,
+            message: 'No stock data found. Products will appear here once stock entries are created.',
+            severity: 'info',
+          });
+        }
       } else {
         if (response.statusCode === 401) {
           setSnackbar({
@@ -91,7 +110,7 @@ function StockPage() {
       console.error('Error fetching stock:', error);
       setSnackbar({
         open: true,
-        message: 'An error occurred while loading stock.',
+        message: 'An error occurred while loading stock. Please check the console for details.',
         severity: 'error',
       });
       setRows([]);
