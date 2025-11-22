@@ -24,15 +24,34 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
   const [formValues, setFormValues] = useState({
     vendor_name: '',
     warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+    ref_no: '',
+    concat: '',
+    remarks: '',
+    schedule_at: new Date().toISOString().slice(0, 16), // Format: YYYY-MM-DDTHH:mm
+    status: 'Draft',
     items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
   });
 
   // Update form when receipt prop or data changes
   useEffect(() => {
     if (receipt) {
+      // Format schedule_at for datetime-local input
+      let scheduleAt = '';
+      if (receipt.schedule_at) {
+        const date = new Date(receipt.schedule_at);
+        scheduleAt = date.toISOString().slice(0, 16);
+      } else {
+        scheduleAt = new Date().toISOString().slice(0, 16);
+      }
+      
       setFormValues({
         vendor_name: receipt.vendor_name || '',
         warehouse_id: receipt.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
+        ref_no: receipt.ref_no || '',
+        concat: receipt.concat || '',
+        remarks: receipt.remarks || '',
+        schedule_at: scheduleAt,
+        status: receipt.status || 'Draft',
         items: receipt.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
       });
     } else {
@@ -40,6 +59,11 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
       setFormValues({
         vendor_name: '',
         warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+        ref_no: '',
+        concat: '',
+        remarks: '',
+        schedule_at: new Date().toISOString().slice(0, 16),
+        status: 'Draft',
         items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
       });
     }
@@ -106,10 +130,19 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
       return;
     }
 
-    // Prepare API payload
+    // Prepare API payload - format schedule_at as ISO string
+    const scheduleAtISO = formValues.schedule_at 
+      ? new Date(formValues.schedule_at).toISOString() 
+      : new Date().toISOString();
+
     const apiPayload = {
       vendor_name: formValues.vendor_name,
       warehouse_id: Number(formValues.warehouse_id),
+      ref_no: formValues.ref_no || '',
+      concat: formValues.concat || '',
+      remarks: formValues.remarks || '',
+      schedule_at: scheduleAtISO,
+      status: formValues.status || 'Draft',
       items: validItems.map((item) => ({
         product_id: Number(item.product_id),
         qty: Number(item.qty),
@@ -125,6 +158,11 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
     setFormValues({
       vendor_name: '',
       warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+      ref_no: '',
+      concat: '',
+      remarks: '',
+      schedule_at: new Date().toISOString().slice(0, 16),
+      status: 'Draft',
       items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
     });
     onClose();
@@ -174,6 +212,38 @@ function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], pr
                 </MenuItem>
               ))}
             </TextField>
+            <TextField
+              label="Reference Number"
+              value={formValues.ref_no}
+              onChange={handleChange('ref_no')}
+              fullWidth
+              variant="outlined"
+            />
+            <TextField
+              label="Contact"
+              value={formValues.concat}
+              onChange={handleChange('concat')}
+              fullWidth
+              variant="outlined"
+            />
+            <TextField
+              label="Remarks"
+              value={formValues.remarks}
+              onChange={handleChange('remarks')}
+              fullWidth
+              multiline
+              rows={2}
+              variant="outlined"
+            />
+            <TextField
+              label="Schedule Date & Time"
+              type="datetime-local"
+              value={formValues.schedule_at}
+              onChange={handleChange('schedule_at')}
+              fullWidth
+              variant="outlined"
+              InputLabelProps={{ shrink: true }}
+            />
 
             <Box>
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>

@@ -7,6 +7,11 @@
  * {
  *   "vendor_name": "string",
  *   "warehouse_id": 0,
+ *   "ref_no": "string",
+ *   "concat": "string",
+ *   "remarks": "string",
+ *   "schedule_at": "2025-11-22T07:54:55.193Z",
+ *   "status": "Draft",
  *   "items": [
  *     {
  *       "product_id": 0,

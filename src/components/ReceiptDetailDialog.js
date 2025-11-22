@@ -26,6 +26,13 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
   const [formValues, setFormValues] = useState({
     vendor_name: receipt?.vendor_name || receipt?.from || '',
     warehouse_id: receipt?.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
+    ref_no: receipt?.ref_no || '',
+    concat: receipt?.concat || receipt?.contact || '',
+    remarks: receipt?.remarks || '',
+    schedule_at: receipt?.schedule_at 
+      ? new Date(receipt.schedule_at).toISOString().slice(0, 16)
+      : new Date().toISOString().slice(0, 16),
+    status: receipt?.status || 'Draft',
     items: receipt?.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
   });
 
@@ -33,16 +40,34 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
   useEffect(() => {
     if (receipt) {
       setStatus(receipt.status || 'Draft');
+      
+      // Format schedule_at for datetime-local input
+      let scheduleAt = '';
+      if (receipt.schedule_at) {
+        const date = new Date(receipt.schedule_at);
+        scheduleAt = date.toISOString().slice(0, 16);
+      } else {
+        scheduleAt = new Date().toISOString().slice(0, 16);
+      }
+      
       setFormValues({
         vendor_name: receipt.vendor_name || receipt.from || '',
         warehouse_id: receipt.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
+        ref_no: receipt.ref_no || '',
+        concat: receipt.concat || receipt.contact || '',
+        remarks: receipt.remarks || '',
+        schedule_at: scheduleAt,
+        status: receipt.status || 'Draft',
         items: receipt.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
       });
     }
   }, [receipt, warehouses, products]);
 
   const handleChange = (field) => (event) => {
-    const value = field === 'warehouse_id' ? Number(event.target.value) : event.target.value;
+    let value = event.target.value;
+    if (field === 'warehouse_id') {
+      value = Number(value);
+    }
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -78,10 +103,19 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
       return;
     }
 
-    // Prepare API payload
+    // Prepare API payload - format schedule_at as ISO string
+    const scheduleAtISO = formValues.schedule_at 
+      ? new Date(formValues.schedule_at).toISOString() 
+      : new Date().toISOString();
+
     const apiPayload = {
       vendor_name: formValues.vendor_name,
       warehouse_id: Number(formValues.warehouse_id),
+      ref_no: formValues.ref_no || '',
+      concat: formValues.concat || '',
+      remarks: formValues.remarks || '',
+      schedule_at: scheduleAtISO,
+      status: status || formValues.status || 'Draft',
       items: validItems.map((item) => ({
         product_id: Number(item.product_id),
         qty: Number(item.qty),
@@ -182,6 +216,38 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
                 </MenuItem>
               ))}
             </TextField>
+            <TextField
+              label="Reference Number"
+              value={formValues.ref_no}
+              onChange={handleChange('ref_no')}
+              fullWidth
+              variant="outlined"
+            />
+            <TextField
+              label="Contact"
+              value={formValues.concat}
+              onChange={handleChange('concat')}
+              fullWidth
+              variant="outlined"
+            />
+            <TextField
+              label="Remarks"
+              value={formValues.remarks}
+              onChange={handleChange('remarks')}
+              fullWidth
+              multiline
+              rows={2}
+              variant="outlined"
+            />
+            <TextField
+              label="Schedule Date & Time"
+              type="datetime-local"
+              value={formValues.schedule_at}
+              onChange={handleChange('schedule_at')}
+              fullWidth
+              variant="outlined"
+              InputLabelProps={{ shrink: true }}
+            />
 
             <Box>
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
