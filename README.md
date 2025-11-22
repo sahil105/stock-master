@@ -26,6 +26,10 @@
 
 ---
 
+## 🎯 Links
+- problem statement ppt : https://docs.google.com/presentation/d/17SG0Va_Duha5nhJftluTH5IBmRt64ZhG/edit?usp=sharing&ouid=114557373931559073589&rtpof=true&sd=true
+- video demo : https://drive.google.com/file/d/1Sjz-sTHB-HzdVO5AdQOvU3vqV5bJREYe/view?usp=sharing
+
 ## 🎯 Overview
 
 Stock Master is an enterprise-grade inventory management solution that helps businesses track stock levels, manage warehouse operations, and maintain accurate inventory records across multiple warehouses and locations. The system features a modern React frontend with Material-UI components and a robust FastAPI backend with MySQL database.
