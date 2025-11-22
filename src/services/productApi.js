@@ -9,6 +9,7 @@
  *   "sku": "string",
  *   "category_id": 0,
  *   "uom": "string",
+ *   "warehouse_id": 0,
  *   "reorder_level": 0
  * }
  */
@@ -33,41 +34,133 @@ export const createProduct = async (payload) => {
       body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+      };
     }
 
-    const data = await response.json();
+    // Handle 422 Validation Error
+    if (response.status === 422) {
+      return {
+        success: false,
+        statusCode: 422,
+        message: data.message || 'Validation error',
+        errors: data.errors || [],
+        meta: data.meta,
+      };
+    }
+
+    // Handle other errors
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+      };
+    }
+
     return { success: true, data };
   } catch (error) {
     console.error('Error creating product:', error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+    };
   }
 };
 
 /**
  * Get all products
+ * @param {Object} params - Query parameters (page, limit, etc.)
  * @returns {Promise<Object>} API response with products list
+ * 
+ * Expected API Response Structure:
+ * {
+ *   "meta": {
+ *     "total": 120,
+ *     "page": 1,
+ *     "limit": 25
+ *   },
+ *   "data": [
+ *     {
+ *       "id": 1,
+ *       "name": "Product Name",
+ *       "sku": "SKU-001",
+ *       "category_id": 2,
+ *       "uom": "kg",
+ *       "created_at": "2025-11-22T06:45:07.597Z"
+ *     }
+ *   ]
+ * }
  */
-export const getProducts = async () => {
+export const getProducts = async (params = {}) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/products`, {
+    const queryParams = new URLSearchParams();
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.search) queryParams.append('search', params.search);
+    
+    const url = `${API_BASE_URL}/products${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         // TODO: Add authentication token if needed
+        // 'Authorization': `Bearer ${getAuthToken()}`,
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+        data: [],
+      };
     }
 
-    const data = await response.json();
-    return { success: true, data };
+    // Handle other errors
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+        data: [],
+      };
+    }
+
+    // Handle paginated response structure
+    return { 
+      success: true, 
+      data: data.data || [], 
+      meta: data.meta || { total: 0, page: 1, limit: 25 }
+    };
   } catch (error) {
     console.error('Error fetching products:', error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+      data: [],
+      meta: { total: 0, page: 1, limit: 25 },
+    };
   }
 };
 
@@ -88,15 +181,47 @@ export const updateProduct = async (productId, payload) => {
       body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+      };
     }
 
-    const data = await response.json();
+    // Handle 422 Validation Error
+    if (response.status === 422) {
+      return {
+        success: false,
+        statusCode: 422,
+        message: data.message || 'Validation error',
+        errors: data.errors || [],
+        meta: data.meta,
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+      };
+    }
+
     return { success: true, data };
   } catch (error) {
     console.error('Error updating product:', error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+    };
   }
 };
 
@@ -115,14 +240,36 @@ export const deleteProduct = async (productId) => {
       },
     });
 
+    const data = await response.json();
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      return {
+        success: false,
+        statusCode: 401,
+        message: data.message || 'Unauthorized access. Please login again.',
+        errors: [],
+      };
+    }
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      return {
+        success: false,
+        statusCode: response.status,
+        message: data.message || `HTTP error! status: ${response.status}`,
+        errors: data.errors || [],
+      };
     }
 
     return { success: true };
   } catch (error) {
     console.error('Error deleting product:', error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      statusCode: 0,
+      message: error.message || 'Network error. Please check your connection.',
+      errors: [],
+    };
   }
 };
 

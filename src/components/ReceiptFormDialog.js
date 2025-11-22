@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Box,
   Button,
-  Chip,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -19,27 +18,55 @@ import {
   Typography,
   Alert,
 } from '@mui/material';
-import { Close, Print, Add, Delete } from '@mui/icons-material';
+import { Close, Delete, Add } from '@mui/icons-material';
 
-function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, warehouses = [], products = [] }) {
-  const [status, setStatus] = useState(receipt?.status || 'Draft');
+function ReceiptFormDialog({ open, onClose, receipt, onSave, warehouses = [], products = [] }) {
   const [formValues, setFormValues] = useState({
-    vendor_name: receipt?.vendor_name || receipt?.from || '',
-    warehouse_id: receipt?.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
-    items: receipt?.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+    vendor_name: '',
+    warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+    items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
   });
 
-  // Update state when receipt prop changes
+  // Update form when receipt prop or data changes
   useEffect(() => {
     if (receipt) {
-      setStatus(receipt.status || 'Draft');
       setFormValues({
-        vendor_name: receipt.vendor_name || receipt.from || '',
+        vendor_name: receipt.vendor_name || '',
         warehouse_id: receipt.warehouse_id || (warehouses.length > 0 ? warehouses[0].id : ''),
         items: receipt.items || [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
       });
+    } else {
+      // Reset form for new receipt
+      setFormValues({
+        vendor_name: '',
+        warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+        items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+      });
     }
   }, [receipt, warehouses, products]);
+
+  // Update warehouse_id and product_id when warehouses/products are loaded (only on initial load)
+  useEffect(() => {
+    if (!receipt && warehouses.length > 0) {
+      setFormValues((prev) => {
+        if (prev.warehouse_id === '' || !prev.warehouse_id) {
+          return { ...prev, warehouse_id: warehouses[0].id };
+        }
+        return prev;
+      });
+    }
+    if (!receipt && products.length > 0) {
+      setFormValues((prev) => {
+        if (prev.items.length > 0 && (prev.items[0].product_id === '' || !prev.items[0].product_id)) {
+          return {
+            ...prev,
+            items: [{ product_id: products[0].id, qty: 0 }],
+          };
+        }
+        return prev;
+      });
+    }
+  }, [warehouses.length, products.length, receipt]);
 
   const handleChange = (field) => (event) => {
     const value = field === 'warehouse_id' ? Number(event.target.value) : event.target.value;
@@ -67,7 +94,8 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
     }
   };
 
-  const handleSave = () => {
+  const handleSubmit = (event) => {
+    event.preventDefault();
     if (!formValues.vendor_name || !formValues.warehouse_id || formValues.items.length === 0) {
       return;
     }
@@ -93,69 +121,33 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
     }
   };
 
-  // Handle "To DO" button click - moves from Draft to Ready
-  const handleToDo = () => {
-    if (status === 'Draft') {
-      const newStatus = 'Ready';
-      setStatus(newStatus);
-      if (onStatusChange) onStatusChange(newStatus);
-    }
+  const handleCancel = () => {
+    setFormValues({
+      vendor_name: '',
+      warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+      items: [{ product_id: products.length > 0 ? products[0].id : '', qty: 0 }],
+    });
+    onClose();
   };
 
-  // Handle "Validate" button click - moves from Ready to Done
-  const handleValidate = () => {
-    if (status === 'Ready') {
-      const newStatus = 'Done';
-      setStatus(newStatus);
-      if (onStatusChange) onStatusChange(newStatus);
-    }
+  const getProductName = (productId) => {
+    const product = products.find((p) => p.id === productId);
+    return product ? `${product.sku || ''} - ${product.name || ''}`.trim() : 'Select Product';
   };
-
-  const handlePrint = () => {
-    if (status === 'Done') {
-      window.print();
-    }
-  };
-
-  const getStatusColor = (s) => {
-    switch (s) {
-      case 'Draft':
-        return 'default';
-      case 'Ready':
-        return 'warning';
-      case 'Done':
-        return 'success';
-      default:
-        return 'default';
-    }
-  };
-
-  // Button visibility logic based on status
-  const showToDoButton = status === 'Draft'; // Show "To DO" when in Draft
-  const showValidateButton = status === 'Ready'; // Show "Validate" when in Ready
-  const canPrint = status === 'Done'; // Print only enabled when Done
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={handleCancel} maxWidth="md" fullWidth>
       <DialogTitle>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Typography variant="h6">Receipt</Typography>
-            <Chip label={receipt?.reference || 'WH/IN/0001'} color="primary" />
-          </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2" color="text.secondary">
-              Draft > Ready > Done
-            </Typography>
-            <IconButton onClick={onClose} size="small">
-              <Close />
-            </IconButton>
-          </Stack>
+          <Typography variant="h6">{receipt ? 'Edit Receipt' : 'Create Receipt'}</Typography>
+          <IconButton onClick={handleCancel} size="small">
+            <Close />
+          </IconButton>
         </Stack>
       </DialogTitle>
       <Divider />
       <DialogContent>
-        <Box component="form" noValidate autoComplete="off" sx={{ mt: 2 }}>
+        <Box component="form" onSubmit={handleSubmit} noValidate autoComplete="off" sx={{ mt: 2 }}>
           <Stack spacing={3}>
             <TextField
               label="Vendor Name"
@@ -263,48 +255,14 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
               </Table>
             </Box>
 
-          <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center">
-            <Chip
-              label={status}
-              color={getStatusColor(status)}
-              variant={status === 'Done' ? 'filled' : 'outlined'}
-            />
-            {/* Workflow: Draft → To DO → Ready → Validate → Done */}
-            <Stack direction="row" spacing={1}>
-              {/* Show "To DO" button when status is Draft */}
-              {showToDoButton && (
-                <Button variant="contained" color="primary" onClick={handleToDo}>
-                  To DO
-                </Button>
-              )}
-              {/* Show "Validate" button when status is Ready */}
-              {showValidateButton && (
-                <Button variant="contained" color="primary" onClick={handleValidate}>
-                  Validate
-                </Button>
-              )}
-              <Button variant="contained" color="secondary" onClick={handleSave}>
-                Save
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<Print />}
-                onClick={handlePrint}
-                disabled={!canPrint}
-              >
-                Print
-              </Button>
-              <Button variant="outlined" color="error" onClick={onClose}>
+            <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 2 }}>
+              <Button variant="outlined" onClick={handleCancel}>
                 Cancel
               </Button>
+              <Button variant="contained" type="submit">
+                {receipt ? 'Update Receipt' : 'Create Receipt'}
+              </Button>
             </Stack>
-          </Stack>
-
-            {status === 'Done' && (
-              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                Print the receipt once it's DONE.
-              </Typography>
-            )}
           </Stack>
         </Box>
       </DialogContent>
@@ -312,5 +270,5 @@ function ReceiptDetailDialog({ open, onClose, receipt, onStatusChange, onSave, w
   );
 }
 
-export default ReceiptDetailDialog;
+export default ReceiptFormDialog;
 
